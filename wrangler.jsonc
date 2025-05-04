@@ -9,7 +9,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "your-database-name",
+      "database_name": "icomag",
       "database_id": "your-database-id",
       "migrations_dir": "drizzle"
     }
