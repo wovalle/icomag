@@ -8,6 +8,27 @@
       "when": 1732083994982,
       "tag": "0000_outstanding_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1746378798705,
+      "tag": "0001_dry_raider",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1746497575680,
+      "tag": "0002_damp_goliath",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1746499150031,
+      "tag": "0003_swift_black_tarantula",
+      "breakpoints": true
     }
   ]
 }
