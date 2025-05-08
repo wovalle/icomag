@@ -1,5 +1,11 @@
 import { Link } from "react-router";
 
+export const loader = ({ request }: Route.LoaderArgs) => {
+  console.log(Object.fromEntries(request.headers.entries()));
+
+  return {};
+};
+
 export default function IndexPage() {
   return (
     <div className="p-6">

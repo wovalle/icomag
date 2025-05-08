@@ -19,12 +19,16 @@ interface TransactionFiltersProps {
     ownerId?: string;
     tagId?: string;
     search?: string;
+    startDate?: string;
+    endDate?: string;
   };
   onApplyFilters: (filters: {
     type: string;
     ownerId: string;
     tagId: string;
     search: string;
+    startDate: string;
+    endDate: string;
   }) => void;
   onResetFilters: () => void;
 }
@@ -42,6 +46,8 @@ export default function TransactionFilters({
   const [filterOwner, setFilterOwner] = useState(initialFilters.ownerId || "");
   const [filterTag, setFilterTag] = useState(initialFilters.tagId || "");
   const [searchTerm, setSearchTerm] = useState(initialFilters.search || "");
+  const [startDate, setStartDate] = useState(initialFilters.startDate || "");
+  const [endDate, setEndDate] = useState(initialFilters.endDate || "");
 
   const applyFilters = () => {
     onApplyFilters({
@@ -49,6 +55,8 @@ export default function TransactionFilters({
       ownerId: filterOwner,
       tagId: filterTag,
       search: searchTerm,
+      startDate: startDate,
+      endDate: endDate,
     });
   };
 
@@ -57,13 +65,15 @@ export default function TransactionFilters({
     setFilterOwner("");
     setFilterTag("");
     setSearchTerm("");
+    setStartDate("");
+    setEndDate("");
     onResetFilters();
   };
 
   return (
     <div className="bg-base-200 p-4 rounded-lg mb-6">
       <h3 className="font-semibold mb-2">Filter Transactions</h3>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="form-control">
           <label className="label">
             <span className="label-text">Transaction Type</span>
@@ -111,6 +121,28 @@ export default function TransactionFilters({
               </option>
             ))}
           </select>
+        </div>
+        <div className="form-control">
+          <label className="label">
+            <span className="label-text">Start Date</span>
+          </label>
+          <input
+            type="date"
+            className="input input-bordered w-full"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </div>
+        <div className="form-control">
+          <label className="label">
+            <span className="label-text">End Date</span>
+          </label>
+          <input
+            type="date"
+            className="input input-bordered w-full"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
         </div>
         <div className="form-control">
           <label className="label">

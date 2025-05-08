@@ -10,7 +10,7 @@
 export async function updateTransactionDescription(
   transactionId: number,
   description: string
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const formData = new FormData();
     formData.append("intent", "updateDescription");
@@ -22,11 +22,21 @@ export async function updateTransactionDescription(
       body: formData,
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Server responded with status: ${response.status}`,
+      };
+    }
+
     const result = await response.json();
-    return result.success;
+    return { success: !!result.success, error: result.error };
   } catch (error) {
     console.error("Error updating transaction description:", error);
-    return false;
+    return {
+      success: false,
+      error: "Failed to update transaction description",
+    };
   }
 }
 
@@ -36,7 +46,7 @@ export async function updateTransactionDescription(
 export async function assignOwnerToTransaction(
   transactionId: number,
   ownerId: string
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const formData = new FormData();
     formData.append("intent", "assignOwner");
@@ -48,11 +58,18 @@ export async function assignOwnerToTransaction(
       body: formData,
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Server responded with status: ${response.status}`,
+      };
+    }
+
     const result = await response.json();
-    return result.success;
+    return { success: !!result.success, error: result.error };
   } catch (error) {
     console.error("Error assigning owner to transaction:", error);
-    return false;
+    return { success: false, error: "Failed to assign owner to transaction" };
   }
 }
 
@@ -62,7 +79,7 @@ export async function assignOwnerToTransaction(
 export async function addTagToTransaction(
   transactionId: number,
   tagId: string
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const formData = new FormData();
     formData.append("intent", "addTag");
@@ -74,11 +91,18 @@ export async function addTagToTransaction(
       body: formData,
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Server responded with status: ${response.status}`,
+      };
+    }
+
     const result = await response.json();
-    return result.success;
+    return { success: !!result.success, error: result.error };
   } catch (error) {
     console.error("Error adding tag to transaction:", error);
-    return false;
+    return { success: false, error: "Failed to add tag to transaction" };
   }
 }
 
@@ -88,7 +112,7 @@ export async function addTagToTransaction(
 export async function removeTagFromTransaction(
   transactionId: number,
   tagId: number
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const formData = new FormData();
     formData.append("intent", "removeTag");
@@ -100,11 +124,18 @@ export async function removeTagFromTransaction(
       body: formData,
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Server responded with status: ${response.status}`,
+      };
+    }
+
     const result = await response.json();
-    return result.success;
+    return { success: !!result.success, error: result.error };
   } catch (error) {
     console.error("Error removing tag from transaction:", error);
-    return false;
+    return { success: false, error: "Failed to remove tag from transaction" };
   }
 }
 
@@ -120,7 +151,7 @@ export async function createTransaction(transactionData: {
   reference?: string | null;
   category?: string | null;
   tag_ids?: string[];
-}): Promise<boolean> {
+}): Promise<{ success: boolean; error?: string }> {
   try {
     const formData = new FormData();
     formData.append("intent", "create");
@@ -152,11 +183,18 @@ export async function createTransaction(transactionData: {
       body: formData,
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Server responded with status: ${response.status}`,
+      };
+    }
+
     const result = await response.json();
-    return result.success;
+    return { success: !!result.success, error: result.error };
   } catch (error) {
     console.error("Error creating transaction:", error);
-    return false;
+    return { success: false, error: "Failed to create transaction" };
   }
 }
 

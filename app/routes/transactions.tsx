@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { useState } from "react";
 import { Link, useLoaderData, useSearchParams } from "react-router";
 import {
@@ -26,6 +26,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     const ownerId = url.searchParams.get("ownerId");
     const transactionType = url.searchParams.get("type");
     const tagId = url.searchParams.get("tagId");
+    const startDate = url.searchParams.get("startDate");
+    const endDate = url.searchParams.get("endDate");
     const page = parseInt(url.searchParams.get("page") || "1");
     const searchTerm = url.searchParams.get("search") || "";
     const limit = 20;
@@ -40,6 +42,20 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
     if (transactionType) {
       whereClause.push(eq(transactions.type, transactionType));
+    }
+
+    // Add date range filters
+    if (startDate) {
+      const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
+      whereClause.push(gte(transactions.date, startTimestamp));
+    }
+
+    if (endDate) {
+      // Set to end of day for the end date
+      const endTimestamp = Math.floor(
+        new Date(endDate + "T23:59:59").getTime() / 1000
+      );
+      whereClause.push(lte(transactions.date, endTimestamp));
     }
 
     if (searchTerm) {
@@ -158,6 +174,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         transactionType,
         tagId,
         search: searchTerm,
+        startDate,
+        endDate,
       },
       error: null,
     };
@@ -327,6 +345,7 @@ export default function TransactionsPage() {
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Handle filter application
   const applyFilters = (filters: {
@@ -334,6 +353,8 @@ export default function TransactionsPage() {
     ownerId: string;
     tagId: string;
     search: string;
+    startDate: string;
+    endDate: string;
   }) => {
     const newParams = new URLSearchParams();
 
@@ -341,6 +362,8 @@ export default function TransactionsPage() {
     if (filters.ownerId) newParams.append("ownerId", filters.ownerId);
     if (filters.tagId) newParams.append("tagId", filters.tagId);
     if (filters.search) newParams.append("search", filters.search);
+    if (filters.startDate) newParams.append("startDate", filters.startDate);
+    if (filters.endDate) newParams.append("endDate", filters.endDate);
     newParams.append("page", "1"); // Reset to first page on filter change
 
     setSearchParams(newParams);
@@ -363,21 +386,40 @@ export default function TransactionsPage() {
     transactionId: number,
     description: string
   ) => {
-    await updateTransactionDescription(transactionId, description);
+    setActionError(null);
+    const result = await updateTransactionDescription(
+      transactionId,
+      description
+    );
+    if (!result.success && result.error) {
+      setActionError(result.error);
+    }
   };
 
   // Handle owner assignment
   const handleOwnerChange = async (transactionId: number, ownerId: string) => {
-    await assignOwnerToTransaction(transactionId, ownerId);
+    setActionError(null);
+    const result = await assignOwnerToTransaction(transactionId, ownerId);
+    if (!result.success && result.error) {
+      setActionError(result.error);
+    }
   };
 
   // Handle tag operations
   const handleAddTag = async (transactionId: number, tagId: string) => {
-    await addTagToTransaction(transactionId, tagId);
+    setActionError(null);
+    const result = await addTagToTransaction(transactionId, tagId);
+    if (!result.success && result.error) {
+      setActionError(result.error);
+    }
   };
 
   const handleRemoveTag = async (transactionId: number, tagId: number) => {
-    await removeTagFromTransaction(transactionId, tagId);
+    setActionError(null);
+    const result = await removeTagFromTransaction(transactionId, tagId);
+    if (!result.success && result.error) {
+      setActionError(result.error);
+    }
   };
 
   return (
@@ -402,9 +444,9 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {error && (
+      {(error || actionError) && (
         <div role="alert" className="alert alert-error mb-4">
-          <span>{error}</span>
+          <span>{error || actionError}</span>
         </div>
       )}
 
