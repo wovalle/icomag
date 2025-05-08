@@ -1,11 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { useState } from "react";
-import { redirect, useLoaderData } from "react-router";
-import {
-  bankAccounts,
-  transactionBatches,
-  transactions,
-} from "../../database/schema";
+import { Form, Link, redirect, useLoaderData } from "react-router";
+import { transactionBatches, transactions } from "../../database/schema";
+import { parsePopularTransactionsFile } from "../services/bankFileParser";
+import type { Route } from "./+types/batches.import";
 
 type ImportLoaderData = {
   error: string | null;
@@ -15,67 +13,43 @@ export async function loader() {
   return { error: null };
 }
 
-export async function action({ request, context }) {
+export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const file = formData.get("csvFile");
   const autoMatch = formData.get("autoMatch") === "on";
+  const usePatternMatching = formData.get("usePatternMatching") === "on";
 
   if (!file || !(file instanceof File)) {
     return { error: "No file uploaded. Please select a CSV file." };
   }
 
   try {
-    // Generate a unique filename to store the batch
-    const timestamp = Date.now();
-    const originalFilename = file.name;
-    const uniqueFilename = `${timestamp}-${originalFilename.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-    
-    // Parse the CSV file
-    const csvText = await file.text();
-    const lines = csvText.split("\\n");
-    
-    // Skip the first 6 lines as they're metadata
-    const dataStart = lines.findIndex(line => 
-      line.includes("Fecha Posteo,") || 
-      line.includes("Fecha Posteo;") || 
-      line.includes("Fecha Posteo|")
-    );
-    
-    if (dataStart === -1) {
-      return { error: "CSV format not recognized. Please upload a valid bank statement CSV file." };
+    // Parse the CSV file using our extracted parser
+    const parseResult = await parsePopularTransactionsFile(file);
+
+    if (parseResult.status === "error") {
+      return { error: parseResult.message };
     }
-    
-    // Determine delimiter (comma, semicolon, etc.)
-    const headerLine = lines[dataStart];
-    let delimiter = ',';
-    if (headerLine.includes(';')) delimiter = ';';
-    if (headerLine.includes('|')) delimiter = '|';
-    
-    const headers = lines[dataStart].split(delimiter).map(h => h.trim());
-    
-    // Parse transactions after the header line, ignoring empty lines
-    const parsedTransactions = lines.slice(dataStart + 1)
-      .filter(line => line.trim() !== '')
-      .map(line => {
-        const values = splitCSVLine(line, delimiter);
-        
-        // Create an object mapping headers to values
-        return headers.reduce((obj, header, index) => {
-          obj[header] = values[index] || '';
-          return obj;
-        }, {});
-      });
-    
-    if (parsedTransactions.length === 0) {
-      return { error: "No transactions found in the CSV file. Please check the format." };
+
+    const {
+      filename,
+      originalFilename,
+      transactions: parsedTransactions,
+    } = parseResult;
+
+    if (!parsedTransactions || parsedTransactions.length === 0) {
+      return {
+        error:
+          "No transactions found in the CSV file. Please check the format.",
+      };
     }
 
     // Create a new batch record
     const [batchRecord] = await context.db
       .insert(transactionBatches)
       .values({
-        filename: uniqueFilename,
-        original_filename: originalFilename,
+        filename: filename!,
+        original_filename: originalFilename!,
         processed_at: Math.floor(Date.now() / 1000),
         total_transactions: parsedTransactions.length,
         new_transactions: 0, // To be updated later
@@ -83,105 +57,106 @@ export async function action({ request, context }) {
         created_at: Math.floor(Date.now() / 1000),
       })
       .returning();
-    
+
     // Get all bank accounts for auto-matching
-    const allBankAccounts = autoMatch 
+    const allBankAccounts = autoMatch
       ? await context.db.query.bankAccounts.findMany({
-          with: { owner: true }
-        }) 
+          with: { owner: true },
+        })
       : [];
-      
+
+    // Get all owner patterns for pattern matching
+    const allOwnerPatterns = usePatternMatching
+      ? await context.db.query.ownerPatterns.findMany()
+      : [];
+
     // Process each transaction
     let newTransactions = 0;
     let duplicatedTransactions = 0;
-    
+
     for (const transaction of parsedTransactions) {
-      // Determine if it's a debit or credit transaction
-      const type = transaction["Descripción Corta"]?.includes("Débito") ? "credit" : "debit";
-      
-      // Parse amount
-      const amount = parseFloat(transaction["Monto Transacción"].replace(/,/g, ""));
-      
-      // Parse date (DD/MM/YYYY)
-      const dateString = transaction["Fecha Posteo"];
-      const date = Math.floor(new Date(convertDateFormat(dateString)).getTime() / 1000);
-      
-      // Get reference and serial
-      const reference = transaction["No. Referencia"] || null;
-      const serial = transaction["No. Serial"] || null;
-      const bankDescription = transaction["Descripción"] || null;
-      
       // Check if transaction already exists by comparing date, amount, type, and reference/serial
-      const existingTransaction = await context.db.query.transactions.findFirst({
-        where: and(
-          eq(transactions.date, date),
-          eq(transactions.amount, amount),
-          eq(transactions.type, type),
-          serial ? eq(transactions.serial, serial) : undefined
-        )
-      });
-      
-      // Determine owner_id through auto-matching
+      const existingTransaction = await context.db.query.transactions.findFirst(
+        {
+          where: and(
+            eq(transactions.date, transaction.date),
+            eq(transactions.amount, transaction.amount),
+            eq(transactions.type, transaction.type),
+            transaction.serial
+              ? eq(transactions.serial, transaction.serial)
+              : undefined
+          ),
+        }
+      );
+
+      // Determine owner_id through auto-matching or pattern matching
       let owner_id = null;
       let bank_account_id = null;
-      
-      if (autoMatch && type === "debit" && serial) {
+
+      if (autoMatch && transaction.type === "debit" && transaction.serial) {
         // Try to match the serial number to a bank account
-        const matchingAccount = allBankAccounts.find(account => 
-          serial.includes(account.account_number)
+        const matchingAccount = allBankAccounts.find((account) =>
+          transaction.serial!.includes(account.account_number)
         );
-        
+
         if (matchingAccount) {
           owner_id = matchingAccount.owner_id;
           bank_account_id = matchingAccount.id;
         }
       }
-      
+
+      if (usePatternMatching && !owner_id) {
+        // Try to match the transaction description to an owner pattern
+        const matchingPattern = allOwnerPatterns.find((pattern) =>
+          new RegExp(pattern.pattern).test(transaction.description)
+        );
+
+        if (matchingPattern) {
+          owner_id = matchingPattern.owner_id;
+        }
+      }
+
       if (existingTransaction) {
         // If transaction exists, mark as duplicate but still add to the batch
         duplicatedTransactions++;
-        await context.db
-          .insert(transactions)
-          .values({
-            type,
-            amount,
-            description: existingTransaction.description, // Keep the existing description
-            date,
-            owner_id: existingTransaction.owner_id, // Keep the existing owner
-            bank_account_id: existingTransaction.bank_account_id,
-            reference,
-            category: existingTransaction.category, // Keep the existing category
-            serial,
-            bank_description: bankDescription,
-            batch_id: batchRecord.id,
-            is_duplicate: 1, // Mark as duplicate
-            created_at: Math.floor(Date.now() / 1000),
-            updated_at: Math.floor(Date.now() / 1000),
-          });
+        await context.db.insert(transactions).values({
+          type: transaction.type,
+          amount: transaction.amount,
+          description: existingTransaction.description, // Keep the existing description
+          date: transaction.date,
+          owner_id: existingTransaction.owner_id, // Keep the existing owner
+          bank_account_id: existingTransaction.bank_account_id,
+          reference: transaction.reference,
+          category: existingTransaction.category, // Keep the existing category
+          serial: transaction.serial,
+          bank_description: transaction.bank_description,
+          batch_id: batchRecord.id,
+          is_duplicate: 1, // Mark as duplicate
+          created_at: Math.floor(Date.now() / 1000),
+          updated_at: Math.floor(Date.now() / 1000),
+        });
       } else {
         // Create new transaction
         newTransactions++;
-        await context.db
-          .insert(transactions)
-          .values({
-            type,
-            amount,
-            description: bankDescription, // Initially use bank description
-            date,
-            owner_id,
-            bank_account_id,
-            reference,
-            category: null,
-            serial,
-            bank_description: bankDescription,
-            batch_id: batchRecord.id,
-            is_duplicate: 0, // Not a duplicate
-            created_at: Math.floor(Date.now() / 1000),
-            updated_at: Math.floor(Date.now() / 1000),
-          });
+        await context.db.insert(transactions).values({
+          type: transaction.type,
+          amount: transaction.amount,
+          description: transaction.description, // Initially use bank description
+          date: transaction.date,
+          owner_id,
+          bank_account_id,
+          reference: transaction.reference,
+          category: null,
+          serial: transaction.serial,
+          bank_description: transaction.bank_description,
+          batch_id: batchRecord.id,
+          is_duplicate: 0, // Not a duplicate
+          created_at: Math.floor(Date.now() / 1000),
+          updated_at: Math.floor(Date.now() / 1000),
+        });
       }
     }
-    
+
     // Update batch statistics
     await context.db
       .update(transactionBatches)
@@ -190,68 +165,42 @@ export async function action({ request, context }) {
         duplicated_transactions: duplicatedTransactions,
       })
       .where(eq(transactionBatches.id, batchRecord.id));
-    
+
     return redirect("/batches");
   } catch (error) {
     console.error("Error processing CSV file:", error);
-    return { error: `Failed to process CSV file: ${error.message}` };
-  }
-}
-
-// Helper function to convert DD/MM/YYYY to YYYY-MM-DD for Date constructor
-function convertDateFormat(dateStr) {
-  if (!dateStr) return null;
-  
-  const parts = dateStr.split('/');
-  if (parts.length !== 3) return dateStr; // Return as is if not in expected format
-  
-  const day = parts[0];
-  const month = parts[1];
-  const year = parts[2];
-  
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-}
-
-// Helper function to properly split CSV lines handling quoted fields
-function splitCSVLine(line, delimiter = ',') {
-  const result = [];
-  let inQuotes = false;
-  let currentValue = '';
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
-      result.push(currentValue.trim());
-      currentValue = '';
-    } else {
-      currentValue += char;
+    let errorMessage = "Failed to process CSV file";
+    if (error instanceof Error) {
+      errorMessage = `${errorMessage}: ${error.message}`;
     }
+    return { error: errorMessage };
   }
-  
-  // Add the last field
-  result.push(currentValue.trim());
-  
-  return result;
 }
 
 export default function ImportBatchPage() {
   const { error } = useLoaderData<ImportLoaderData>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
-  
-  const handleSubmit = (event) => {
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     if (!fileSelected) {
       event.preventDefault();
       return;
     }
     setIsSubmitting(true);
   };
-  
-  const handleFileChange = (event) => {
-    setFileSelected(event.target.files.length > 0);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+
+    if (!files || files.length === 0) {
+      setFileSelected(false);
+      return;
+    }
+
+    // Check if the file is larger than 5MB
+
+    setFileSelected(files.length > 0);
   };
 
   return (
@@ -277,7 +226,11 @@ export default function ImportBatchPage() {
       )}
 
       <div className="bg-base-100 rounded-box shadow p-6 max-w-2xl mx-auto">
-        <form method="post" encType="multipart/form-data" onSubmit={handleSubmit}>
+        <Form
+          method="post"
+          encType="multipart/form-data"
+          onSubmit={handleSubmit}
+        >
           <div className="form-control mb-4">
             <label className="label">
               <span className="label-text">CSV File</span>
@@ -292,8 +245,8 @@ export default function ImportBatchPage() {
                 required
               />
               <p className="text-sm text-gray-500 mt-2">
-                The file should be a CSV export from your bank. The first 6 lines will be
-                ignored as they contain metadata.
+                The file should be a CSV export from your bank. The first 6
+                lines will be ignored as they contain metadata.
               </p>
             </div>
           </div>
@@ -302,12 +255,37 @@ export default function ImportBatchPage() {
 
           <div className="form-control mb-6">
             <label className="label cursor-pointer justify-start">
-              <span className="label-text mr-4">Auto-match transactions to owners based on bank accounts</span>
-              <input type="checkbox" name="autoMatch" className="checkbox" defaultChecked />
+              <span className="label-text mr-4">
+                Auto-match transactions to owners based on bank accounts
+              </span>
+              <input
+                type="checkbox"
+                name="autoMatch"
+                className="checkbox"
+                defaultChecked
+              />
             </label>
             <p className="text-sm text-gray-500">
-              When enabled, the system will automatically link transactions to owners
-              based on the bank account number found in the transaction details.
+              When enabled, the system will automatically link transactions to
+              owners based on the bank account number found in the transaction
+              details.
+            </p>
+          </div>
+
+          <div className="form-control mb-6">
+            <label className="label cursor-pointer justify-start">
+              <span className="label-text mr-4">
+                Use pattern matching for owner identification
+              </span>
+              <input
+                type="checkbox"
+                name="usePatternMatching"
+                className="checkbox"
+              />
+            </label>
+            <p className="text-sm text-gray-500">
+              When enabled, the system will use regex patterns to identify
+              owners based on transaction descriptions.
             </p>
           </div>
 
@@ -320,7 +298,7 @@ export default function ImportBatchPage() {
               {isSubmitting ? "Processing..." : "Import Transactions"}
             </button>
           </div>
-        </form>
+        </Form>
       </div>
     </div>
   );

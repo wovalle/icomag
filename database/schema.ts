@@ -1,5 +1,5 @@
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const guestBook = sqliteTable("guest_book", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -14,6 +14,23 @@ export const owners = sqliteTable("owners", {
   email: text(),
   phone: text(),
   apartment_id: text().notNull().unique(), // Unique apartment ID as a string
+  is_active: integer().default(1), // 1 for active, 0 for inactive
+  created_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+  updated_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
+// Owner recognition patterns table to identify transactions
+export const ownerPatterns = sqliteTable("owner_patterns", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  owner_id: integer()
+    .references(() => owners.id, { onDelete: "cascade" })
+    .notNull(),
+  pattern: text().notNull(), // Regex pattern string
+  description: text(), // Description of what this pattern matches
   is_active: integer().default(1), // 1 for active, 0 for inactive
   created_at: integer()
     .notNull()
@@ -112,6 +129,15 @@ export const transactionToTags = sqliteTable("transaction_to_tags", {
 export const ownersRelations = relations(owners, ({ many }) => ({
   bankAccounts: many(bankAccounts),
   transactions: many(transactions),
+  recognitionPatterns: many(ownerPatterns),
+}));
+
+// Define relations for owner patterns
+export const ownerPatternsRelations = relations(ownerPatterns, ({ one }) => ({
+  owner: one(owners, {
+    fields: [ownerPatterns.owner_id],
+    references: [owners.id],
+  }),
 }));
 
 // Define relations for bank accounts
@@ -123,40 +149,52 @@ export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
 }));
 
 // Define relations for transactions
-export const transactionsRelations = relations(transactions, ({ one, many }) => ({
-  owner: one(owners, {
-    fields: [transactions.owner_id],
-    references: [owners.id],
-  }),
-  bankAccount: one(bankAccounts, {
-    fields: [transactions.bank_account_id],
-    references: [bankAccounts.id],
-  }),
-  batch: one(transactionBatches, {
-    fields: [transactions.batch_id],
-    references: [transactionBatches.id],
-  }),
-  tags: many(transactionToTags),
-}));
+export const transactionsRelations = relations(
+  transactions,
+  ({ one, many }) => ({
+    owner: one(owners, {
+      fields: [transactions.owner_id],
+      references: [owners.id],
+    }),
+    bankAccount: one(bankAccounts, {
+      fields: [transactions.bank_account_id],
+      references: [bankAccounts.id],
+    }),
+    batch: one(transactionBatches, {
+      fields: [transactions.batch_id],
+      references: [transactionBatches.id],
+    }),
+    tags: many(transactionToTags),
+  })
+);
 
 // Define relations for transaction batches
-export const transactionBatchesRelations = relations(transactionBatches, ({ many }) => ({
-  transactions: many(transactions),
-}));
+export const transactionBatchesRelations = relations(
+  transactionBatches,
+  ({ many }) => ({
+    transactions: many(transactions),
+  })
+);
 
 // Define relations for transaction tags
-export const transactionTagsRelations = relations(transactionTags, ({ many }) => ({
-  transactionToTags: many(transactionToTags),
-}));
+export const transactionTagsRelations = relations(
+  transactionTags,
+  ({ many }) => ({
+    transactionToTags: many(transactionToTags),
+  })
+);
 
 // Define relations for the many-to-many join table
-export const transactionToTagsRelations = relations(transactionToTags, ({ one }) => ({
-  transaction: one(transactions, {
-    fields: [transactionToTags.transaction_id],
-    references: [transactions.id],
-  }),
-  tag: one(transactionTags, {
-    fields: [transactionToTags.tag_id],
-    references: [transactionTags.id],
-  }),
-}));
+export const transactionToTagsRelations = relations(
+  transactionToTags,
+  ({ one }) => ({
+    transaction: one(transactions, {
+      fields: [transactionToTags.transaction_id],
+      references: [transactions.id],
+    }),
+    tag: one(transactionTags, {
+      fields: [transactionToTags.tag_id],
+      references: [transactionTags.id],
+    }),
+  })
+);

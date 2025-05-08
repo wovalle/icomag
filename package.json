@@ -11,7 +11,8 @@
     "deploy": "npm run build && wrangler deploy",
     "dev": "react-router dev",
     "preview": "npm run build && vite preview",
-    "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
+    "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
+    "test": "vitest"
   },
   "dependencies": {
     "@react-router/fs-routes": "^7.5.3",
@@ -36,6 +37,7 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.3",
     "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.1.3",
     "wrangler": "^4.13.2"
   }
 }

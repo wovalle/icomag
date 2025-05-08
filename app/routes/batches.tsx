@@ -1,27 +1,28 @@
-import { eq } from "drizzle-orm";
 import { Link, useLoaderData } from "react-router";
-import { transactionBatches } from "../../database/schema";
+import type { Route } from "./+types/batches";
 
 type BatchLoaderData = {
   batches: any[];
   error: string | null;
 };
 
-export async function loader({ context }) {
+export async function loader({ context }: Route.LoaderArgs) {
   try {
     const batches = await context.db.query.transactionBatches.findMany({
-      orderBy: (transactionBatches, { desc }) => [desc(transactionBatches.processed_at)]
+      orderBy: (transactionBatches, { desc }) => [
+        desc(transactionBatches.processed_at),
+      ],
     });
-    
+
     return {
       batches,
-      error: null
+      error: null,
     };
   } catch (error) {
     console.error("Error loading transaction batches:", error);
     return {
       batches: [],
-      error: "Failed to load transaction batches"
+      error: "Failed to load transaction batches",
     };
   }
 }
@@ -30,7 +31,7 @@ export default function BatchesPage() {
   const { batches, error } = useLoaderData<BatchLoaderData>();
 
   // Format date function
-  const formatDate = (timestamp) => {
+  const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",

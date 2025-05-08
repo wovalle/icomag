@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { useState } from "react";
 import { Link, useLoaderData } from "react-router";
+import type { Route } from "../+types/root";
 import { transactionBatches, transactions } from "../../database/schema";
 
 type BatchDetailLoaderData = {
@@ -9,31 +10,39 @@ type BatchDetailLoaderData = {
   error: string | null;
 };
 
-export async function loader({ context, params }) {
+export async function loader({ context, params }: Route.LoaderArgs) {
+  if (!params.id) {
+    return {
+      batch: null,
+      transactions: [],
+      error: "Batch ID is required",
+    };
+  }
+
   const batchId = parseInt(params.id);
-  
+
   if (isNaN(batchId)) {
     return {
       batch: null,
       transactions: [],
-      error: "Invalid batch ID"
+      error: "Invalid batch ID",
     };
   }
-  
+
   try {
     // Load the batch
     const batch = await context.db.query.transactionBatches.findFirst({
-      where: eq(transactionBatches.id, batchId)
+      where: eq(transactionBatches.id, batchId),
     });
-    
+
     if (!batch) {
       return {
         batch: null,
         transactions: [],
-        error: `Batch with ID ${batchId} not found`
+        error: `Batch with ID ${batchId} not found`,
       };
     }
-    
+
     // Load all transactions from this batch
     const batchTransactions = await context.db.query.transactions.findMany({
       where: eq(transactions.batch_id, batchId),
@@ -42,18 +51,18 @@ export async function loader({ context, params }) {
         owner: true,
       },
     });
-    
+
     return {
       batch,
       transactions: batchTransactions,
-      error: null
+      error: null,
     };
   } catch (error) {
     console.error(`Error loading batch ${batchId}:`, error);
     return {
       batch: null,
       transactions: [],
-      error: "Failed to load batch details"
+      error: "Failed to load batch details",
     };
   }
 }
@@ -61,24 +70,24 @@ export async function loader({ context, params }) {
 export default function BatchDetailPage() {
   const { batch, transactions, error } = useLoaderData<BatchDetailLoaderData>();
   const [showDuplicates, setShowDuplicates] = useState(true);
-  
+
   // Format date function
-  const formatDate = (timestamp) => {
+  const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString();
   };
-  
+
   // Format currency function
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
     }).format(amount);
   };
-  
+
   // Filter transactions based on duplicate status
-  const filteredTransactions = showDuplicates 
-    ? transactions 
-    : transactions.filter(transaction => transaction.is_duplicate === 0);
+  const filteredTransactions = showDuplicates
+    ? transactions
+    : transactions.filter((transaction) => transaction.is_duplicate === 0);
 
   return (
     <div className="p-6">
@@ -101,21 +110,33 @@ export default function BatchDetailPage() {
           <span>{error}</span>
         </div>
       )}
-      
+
       {batch && (
         <>
           <div className="bg-base-100 rounded-box shadow p-6 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <h3 className="text-lg font-semibold">Batch Information</h3>
-                <p className="text-sm text-gray-600">Original filename: {batch.original_filename}</p>
-                <p className="text-sm text-gray-600">Processed at: {formatDate(batch.processed_at)}</p>
+                <p className="text-sm text-gray-600">
+                  Original filename: {batch.original_filename}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Processed at: {formatDate(batch.processed_at)}
+                </p>
               </div>
               <div>
-                <h3 className="text-lg font-semibold">Transaction Statistics</h3>
-                <p className="text-sm text-gray-600">Total transactions: {batch.total_transactions}</p>
-                <p className="text-sm text-success">New transactions: {batch.new_transactions}</p>
-                <p className="text-sm text-warning">Duplicate transactions: {batch.duplicated_transactions}</p>
+                <h3 className="text-lg font-semibold">
+                  Transaction Statistics
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Total transactions: {batch.total_transactions}
+                </p>
+                <p className="text-sm text-success">
+                  New transactions: {batch.new_transactions}
+                </p>
+                <p className="text-sm text-warning">
+                  Duplicate transactions: {batch.duplicated_transactions}
+                </p>
               </div>
               <div className="flex justify-end items-center">
                 <label className="label cursor-pointer">
@@ -130,7 +151,7 @@ export default function BatchDetailPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-base-100 rounded-box shadow">
             <div className="overflow-x-auto">
               <table className="table table-zebra">
@@ -154,17 +175,24 @@ export default function BatchDetailPage() {
                     </tr>
                   ) : (
                     filteredTransactions.map((transaction) => (
-                      <tr key={transaction.id} className={transaction.is_duplicate ? "opacity-60" : ""}>
+                      <tr
+                        key={transaction.id}
+                        className={transaction.is_duplicate ? "opacity-60" : ""}
+                      >
                         <td>{formatDate(transaction.date)}</td>
                         <td>
-                          {transaction.description || transaction.bank_description || "No description"}
-                          {transaction.bank_description && transaction.description !== transaction.bank_description && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Original: {transaction.bank_description}
-                            </div>
-                          )}
+                          {transaction.description ||
+                            transaction.bank_description ||
+                            "No description"}
+                          {transaction.bank_description &&
+                            transaction.description !==
+                              transaction.bank_description && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Original: {transaction.bank_description}
+                              </div>
+                            )}
                         </td>
-                        <td 
+                        <td
                           className={
                             transaction.type === "debit"
                               ? "text-success"
@@ -186,7 +214,8 @@ export default function BatchDetailPage() {
                               to={`/owners/${transaction.owner.id}`}
                               className="link"
                             >
-                              {transaction.owner.name} ({transaction.owner.apartment_id})
+                              {transaction.owner.name} (
+                              {transaction.owner.apartment_id})
                             </Link>
                           ) : (
                             <span className="text-gray-400">Not assigned</span>

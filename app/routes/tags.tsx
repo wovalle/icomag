@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLoaderData } from "react-router";
+import { Form, useLoaderData } from "react-router";
 
 import { transactionTags } from "../../database/schema";
 import type { Route } from "./+types/tags";
@@ -105,11 +105,11 @@ export default function TagsIndex() {
                   >
                     Edit
                   </button>
-                  <form method="post" action={`/tags/${tag.id}/delete`}>
+                  <Form method="post" action={`/tags/${tag.id}/delete`}>
                     <button type="submit" className="btn btn-sm btn-error">
                       Delete
                     </button>
-                  </form>
+                  </Form>
                 </div>
               </div>
             </div>
@@ -124,7 +124,7 @@ export default function TagsIndex() {
             <h3 className="font-bold text-lg">
               {editingTag ? "Edit Tag" : "Add New Tag"}
             </h3>
-            <form
+            <Form
               method="post"
               action={editingTag ? `/tags/${editingTag.id}` : undefined}
             >
@@ -192,7 +192,7 @@ export default function TagsIndex() {
                   Cancel
                 </button>
               </div>
-            </form>
+            </Form>
           </div>
           <form method="dialog" className="modal-backdrop">
             <button onClick={() => setIsModalOpen(false)}>close</button>

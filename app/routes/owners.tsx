@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLoaderData } from "react-router";
+import { Form, Link, useLoaderData } from "react-router";
 
 import { owners } from "../../database/schema";
 import type { Route } from "./+types/owners";
@@ -105,7 +105,7 @@ export default function OwnersIndex() {
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Add New Owner</h3>
-            <form method="post">
+            <Form method="post">
               <div className="form-control">
                 <label className="label">
                   <span className="label-text">Name</span>
@@ -168,7 +168,7 @@ export default function OwnersIndex() {
                   Cancel
                 </button>
               </div>
-            </form>
+            </Form>
           </div>
           <form method="dialog" className="modal-backdrop">
             <button onClick={() => setIsModalOpen(false)}>close</button>
