@@ -40,24 +40,6 @@ export const ownerPatterns = sqliteTable("owner_patterns", {
     .$defaultFn(() => Math.floor(Date.now() / 1000)),
 });
 
-// Bank accounts table to track owners' bank accounts
-export const bankAccounts = sqliteTable("bank_accounts", {
-  id: integer().primaryKey({ autoIncrement: true }),
-  owner_id: integer()
-    .references(() => owners.id, { onDelete: "cascade" })
-    .notNull(),
-  account_number: text().notNull(),
-  bank_name: text(),
-  description: text(),
-  is_active: integer().default(1), // 1 for active, 0 for inactive
-  created_at: integer()
-    .notNull()
-    .$defaultFn(() => Math.floor(Date.now() / 1000)),
-  updated_at: integer()
-    .notNull()
-    .$defaultFn(() => Math.floor(Date.now() / 1000)),
-});
-
 // Transaction batches table to track imported files
 export const transactionBatches = sqliteTable("transaction_batches", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -80,9 +62,6 @@ export const transactions = sqliteTable("transactions", {
   description: text(),
   date: integer().notNull(), // Unix timestamp
   owner_id: integer().references(() => owners.id, { onDelete: "set null" }),
-  bank_account_id: integer().references(() => bankAccounts.id, {
-    onDelete: "set null",
-  }),
   reference: text(), // Bank reference number
   category: text(), // For categorizing expenses/income
   serial: text(), // Bank serial number from CSV
@@ -127,7 +106,6 @@ export const transactionToTags = sqliteTable("transaction_to_tags", {
 
 // Define relations for owners
 export const ownersRelations = relations(owners, ({ many }) => ({
-  bankAccounts: many(bankAccounts),
   transactions: many(transactions),
   recognitionPatterns: many(ownerPatterns),
 }));
@@ -140,14 +118,6 @@ export const ownerPatternsRelations = relations(ownerPatterns, ({ one }) => ({
   }),
 }));
 
-// Define relations for bank accounts
-export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
-  owner: one(owners, {
-    fields: [bankAccounts.owner_id],
-    references: [owners.id],
-  }),
-}));
-
 // Define relations for transactions
 export const transactionsRelations = relations(
   transactions,
@@ -155,10 +125,6 @@ export const transactionsRelations = relations(
     owner: one(owners, {
       fields: [transactions.owner_id],
       references: [owners.id],
-    }),
-    bankAccount: one(bankAccounts, {
-      fields: [transactions.bank_account_id],
-      references: [bankAccounts.id],
     }),
     batch: one(transactionBatches, {
       fields: [transactions.batch_id],

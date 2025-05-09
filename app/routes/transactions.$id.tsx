@@ -1,208 +1,256 @@
+import { and, eq } from "drizzle-orm";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import {
+  Form,
+  Link,
+  useLoaderData,
+  useNavigate,
+  useSubmit,
+} from "react-router";
+import {
+  transactionTags,
+  transactionToTags,
+  transactions,
+} from "../../database/schema";
+import { formatters } from "../services/transactionService";
 
-interface Tag {
-  id: number;
-  name: string;
-  color: string;
+import type { Route } from "./+types/transactions.$id";
+
+export async function loader({ context, params }: Route.LoaderArgs) {
+  const id = parseInt(params.id || "0");
+
+  if (!id) {
+    return {
+      transaction: null,
+      owners: [],
+      allTags: [],
+      error: "Invalid transaction ID",
+    };
+  }
+
+  try {
+    // Fetch transaction with owner
+    const transaction = await context.db.query.transactions.findFirst({
+      where: eq(transactions.id, id),
+      with: {
+        owner: true,
+      },
+    });
+
+    if (!transaction) {
+      return {
+        transaction: null,
+        owners: [],
+        allTags: [],
+        error: "Transaction not found",
+      };
+    }
+
+    // Get tags for this transaction
+    const transactionTagsList = await context.db
+      .select({
+        id: transactionTags.id,
+        name: transactionTags.name,
+        color: transactionTags.color,
+      })
+      .from(transactionToTags)
+      .innerJoin(
+        transactionTags,
+        eq(transactionToTags.tag_id, transactionTags.id)
+      )
+      .where(eq(transactionToTags.transaction_id, id));
+
+    // Get all owners
+    const ownersList = await context.db.query.owners.findMany({
+      orderBy: (owners, { asc }) => [asc(owners.name)],
+    });
+
+    // Get all tags
+    const allTagsList = await context.db.query.transactionTags.findMany({
+      orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
+    });
+
+    return {
+      transaction: {
+        ...transaction,
+        tags: transactionTagsList,
+      },
+      owners: ownersList,
+      allTags: allTagsList,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error loading transaction details:", error);
+    return {
+      transaction: null,
+      owners: [],
+      allTags: [],
+      error: "Failed to load transaction details",
+    };
+  }
 }
 
-interface Owner {
-  id: number;
-  name: string;
-  apartment_id: string;
-}
+export async function action({ request, context, params }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const id = parseInt(params.id || "0");
 
-interface Transaction {
-  id: number;
-  date: number;
-  description: string;
-  bank_description: string;
-  amount: number;
-  type: string;
-  owner_id: number | null;
-  tags: Tag[];
-  reference?: string | null;
-  serial?: string | null;
+  if (!id) {
+    return { success: false, error: "Invalid transaction ID" };
+  }
+
+  if (intent === "updateDescription") {
+    const description = formData.get("description") as string;
+
+    try {
+      await context.db
+        .update(transactions)
+        .set({
+          description,
+          updated_at: Math.floor(Date.now() / 1000),
+        })
+        .where(eq(transactions.id, id));
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error updating transaction description:", error);
+      return {
+        success: false,
+        error: "Failed to update transaction description",
+      };
+    }
+  } else if (intent === "assignOwner") {
+    const owner_id =
+      formData.get("owner_id") === "null"
+        ? null
+        : parseInt(formData.get("owner_id") as string);
+
+    try {
+      await context.db
+        .update(transactions)
+        .set({
+          owner_id,
+          updated_at: Math.floor(Date.now() / 1000),
+        })
+        .where(eq(transactions.id, id));
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error assigning owner to transaction:", error);
+      return { success: false, error: "Failed to assign owner to transaction" };
+    }
+  } else if (intent === "addTag") {
+    const tag_id = parseInt(formData.get("tag_id") as string);
+
+    try {
+      // Check if the tag is already assigned to the transaction
+      const existingTag = await context.db
+        .select()
+        .from(transactionToTags)
+        .where(
+          and(
+            eq(transactionToTags.transaction_id, id),
+            eq(transactionToTags.tag_id, tag_id)
+          )
+        )
+        .limit(1);
+
+      if (existingTag.length === 0) {
+        await context.db.insert(transactionToTags).values({
+          transaction_id: id,
+          tag_id,
+          created_at: Math.floor(Date.now() / 1000),
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error adding tag to transaction:", error);
+      return { success: false, error: "Failed to add tag to transaction" };
+    }
+  } else if (intent === "removeTag") {
+    const tag_id = parseInt(formData.get("tag_id") as string);
+
+    try {
+      await context.db
+        .delete(transactionToTags)
+        .where(
+          and(
+            eq(transactionToTags.transaction_id, id),
+            eq(transactionToTags.tag_id, tag_id)
+          )
+        );
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error removing tag from transaction:", error);
+      return { success: false, error: "Failed to remove tag from transaction" };
+    }
+  }
+
+  return { success: false, error: "Invalid action" };
 }
 
 export default function TransactionDetail() {
-  const { id } = useParams<{ id: string }>();
+  const {
+    transaction,
+    owners,
+    allTags,
+    error: loaderError,
+  } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  const [transaction, setTransaction] = useState<Transaction | null>(null);
-  const [owners, setOwners] = useState<Owner[]>([]);
-  const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedTagId, setSelectedTagId] = useState("");
+  const submit = useSubmit();
   const [isEditing, setIsEditing] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
-
-  // Dummy formatters - replace with your actual formatters
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-
-  const formatDate = (timestamp: number) =>
-    new Date(timestamp * 1000).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+  const [selectedTagId, setSelectedTagId] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchTransactionData() {
-      try {
-        setLoading(true);
-
-        // In a real app, you would fetch transaction data from your API
-        // For now, simulate API calls with timeouts
-
-        // Fetch transaction
-        const response = await fetch(`/api/transactions/${id}`);
-        if (!response.ok) {
-          throw new Error("Transaction not found");
-        }
-        const data = await response.json();
-        setTransaction(data);
-        setEditedDescription(data.description);
-
-        // Fetch owners
-        const ownersResponse = await fetch("/api/owners");
-        const ownersData = await ownersResponse.json();
-        setOwners(ownersData);
-
-        // Fetch tags
-        const tagsResponse = await fetch("/api/tags");
-        const tagsData = await tagsResponse.json();
-        setAllTags(tagsData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
-      }
+    if (transaction) {
+      setEditedDescription(transaction.description || "");
     }
+  }, [transaction]);
 
-    fetchTransactionData();
-  }, [id]);
+  const handleUpdateDescription = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append("intent", "updateDescription");
+    formData.append("description", editedDescription);
 
-  const handleUpdateDescription = async () => {
-    if (!transaction) return;
-
-    try {
-      // In a real app, send the updated description to your API
-      const response = await fetch(`/api/transactions/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ description: editedDescription }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update transaction");
-      }
-
-      // Update local state
-      setTransaction({
-        ...transaction,
-        description: editedDescription,
-      });
-      setIsEditing(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    }
+    submit(formData, { method: "post" });
+    setIsEditing(false);
   };
 
-  const handleOwnerChange = async (ownerId: string) => {
-    if (!transaction) return;
+  const handleOwnerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const ownerId = e.target.value;
+    const formData = new FormData();
+    formData.append("intent", "assignOwner");
+    formData.append("owner_id", ownerId);
 
-    try {
-      // In a real app, send the updated owner to your API
-      const response = await fetch(`/api/transactions/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          owner_id: ownerId === "null" ? null : parseInt(ownerId),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update owner");
-      }
-
-      // Update local state
-      setTransaction({
-        ...transaction,
-        owner_id: ownerId === "null" ? null : parseInt(ownerId),
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    }
+    submit(formData, { method: "post" });
   };
 
-  const handleAddTag = async () => {
-    if (!transaction || !selectedTagId) return;
+  const handleAddTag = () => {
+    if (!selectedTagId) return;
 
-    try {
-      // In a real app, send the tag to your API
-      const response = await fetch(`/api/transactions/${id}/tags`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tag_id: parseInt(selectedTagId) }),
-      });
+    const formData = new FormData();
+    formData.append("intent", "addTag");
+    formData.append("tag_id", selectedTagId);
 
-      if (!response.ok) {
-        throw new Error("Failed to add tag");
-      }
-
-      // Find the tag that was added
-      const tagToAdd = allTags.find(
-        (tag) => tag.id === parseInt(selectedTagId)
-      );
-      if (tagToAdd && !transaction.tags.some((tag) => tag.id === tagToAdd.id)) {
-        // Update local state
-        setTransaction({
-          ...transaction,
-          tags: [...transaction.tags, tagToAdd],
-        });
-        setSelectedTagId("");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    }
+    submit(formData, { method: "post" });
+    setSelectedTagId("");
   };
 
-  const handleRemoveTag = async (tagId: number) => {
-    if (!transaction) return;
+  const handleRemoveTag = (tagId: number) => {
+    const formData = new FormData();
+    formData.append("intent", "removeTag");
+    formData.append("tag_id", tagId.toString());
 
-    try {
-      // In a real app, delete the tag from your API
-      const response = await fetch(`/api/transactions/${id}/tags/${tagId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to remove tag");
-      }
-
-      // Update local state
-      setTransaction({
-        ...transaction,
-        tags: transaction.tags.filter((tag) => tag.id !== tagId),
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    }
+    submit(formData, { method: "post" });
   };
 
-  if (loading) {
+  // Render loading state
+  if (!transaction && !loaderError) {
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
         <span className="loading loading-spinner loading-lg text-primary"></span>
@@ -210,7 +258,8 @@ export default function TransactionDetail() {
     );
   }
 
-  if (error) {
+  // Render error state
+  if (loaderError || actionError) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center">
         <div className="alert alert-error shadow-lg max-w-md">
@@ -228,7 +277,7 @@ export default function TransactionDetail() {
                 d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span>{error}</span>
+            <span>{loaderError || actionError}</span>
           </div>
         </div>
         <button
@@ -241,6 +290,7 @@ export default function TransactionDetail() {
     );
   }
 
+  // Render transaction not found
   if (!transaction) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center">
@@ -272,8 +322,9 @@ export default function TransactionDetail() {
     );
   }
 
-  const owner = owners.find((o) => o.id === transaction.owner_id);
+  const owner = transaction.owner;
 
+  // Rest of your component remains largely the same, just using the loaderData
   return (
     <div className="container mx-auto p-4">
       <div className="flex items-center mb-6">
@@ -314,7 +365,7 @@ export default function TransactionDetail() {
                 <span className="font-semibold block text-sm opacity-70">
                   Date
                 </span>
-                <span>{formatDate(transaction.date)}</span>
+                <span>{formatters.formatDate(transaction.date)}</span>
               </div>
 
               <div>
@@ -328,7 +379,7 @@ export default function TransactionDetail() {
                       : "text-error"
                   }`}
                 >
-                  {formatCurrency(transaction.amount)}
+                  {formatters.formatCurrency(transaction.amount)}
                 </span>
               </div>
 
@@ -368,7 +419,7 @@ export default function TransactionDetail() {
             <div className="divider"></div>
 
             {isEditing ? (
-              <div>
+              <Form onSubmit={handleUpdateDescription}>
                 <textarea
                   className="textarea textarea-bordered w-full"
                   value={editedDescription}
@@ -376,23 +427,21 @@ export default function TransactionDetail() {
                   rows={4}
                 ></textarea>
                 <div className="flex gap-2 mt-2">
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleUpdateDescription}
-                  >
+                  <button type="submit" className="btn btn-primary">
                     Save
                   </button>
                   <button
+                    type="button"
                     className="btn btn-ghost"
                     onClick={() => {
                       setIsEditing(false);
-                      setEditedDescription(transaction.description);
+                      setEditedDescription(transaction.description || "");
                     }}
                   >
                     Cancel
                   </button>
                 </div>
-              </div>
+              </Form>
             ) : (
               <div>
                 <p className="mb-4">{transaction.description}</p>
@@ -421,18 +470,22 @@ export default function TransactionDetail() {
             <h2 className="card-title">Owner</h2>
             <div className="divider"></div>
 
-            <select
-              className="select select-bordered w-full"
-              value={transaction.owner_id?.toString() || "null"}
-              onChange={(e) => handleOwnerChange(e.target.value)}
-            >
-              <option value="null">Not assigned</option>
-              {owners.map((owner) => (
-                <option key={owner.id} value={owner.id.toString()}>
-                  {owner.name} ({owner.apartment_id})
-                </option>
-              ))}
-            </select>
+            <Form method="post">
+              <input type="hidden" name="intent" value="assignOwner" />
+              <select
+                name="owner_id"
+                className="select select-bordered w-full"
+                value={transaction.owner_id?.toString() || "null"}
+                onChange={handleOwnerChange}
+              >
+                <option value="null">Not assigned</option>
+                {owners.map((owner) => (
+                  <option key={owner.id} value={owner.id.toString()}>
+                    {owner.name} ({owner.apartment_id})
+                  </option>
+                ))}
+              </select>
+            </Form>
 
             {owner && (
               <div className="mt-4">
@@ -460,7 +513,10 @@ export default function TransactionDetail() {
                   <div
                     key={tag.id}
                     className="badge gap-1"
-                    style={{ backgroundColor: tag.color, color: "#fff" }}
+                    style={{
+                      backgroundColor: tag.color ?? undefined,
+                      color: "#fff",
+                    }}
                   >
                     {tag.name}
                     <button

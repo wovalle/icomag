@@ -1,7 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { useState } from "react";
 import { Form, Link, redirect, useLoaderData } from "react-router";
-import { transactionBatches, transactions } from "../../database/schema";
+import {
+  transactionBatches,
+  transactionTags,
+  transactionToTags,
+  transactions,
+} from "../../database/schema";
 import { parsePopularTransactionsFile } from "../services/bankFileParser";
 import type { Route } from "./+types/batches.import";
 
@@ -58,12 +63,28 @@ export async function action({ request, context }: Route.ActionArgs) {
       })
       .returning();
 
-    // Get all bank accounts for auto-matching
-    const allBankAccounts = autoMatch
-      ? await context.db.query.bankAccounts.findMany({
-          with: { owner: true },
+    // Create a batch tag if it doesn't exist
+    const batchTagName = `b-${batchRecord.id}`;
+
+    // Check if the tag already exists
+    let batchTag = await context.db.query.transactionTags.findFirst({
+      where: eq(transactionTags.name, batchTagName),
+    });
+
+    // If the tag doesn't exist, create it
+    if (!batchTag) {
+      const [newTag] = await context.db
+        .insert(transactionTags)
+        .values({
+          name: batchTagName,
+          description: `Transactions from batch ${batchRecord.id}`,
+          created_at: Math.floor(Date.now() / 1000),
+          updated_at: Math.floor(Date.now() / 1000),
         })
-      : [];
+        .returning();
+
+      batchTag = newTag;
+    }
 
     // Get all owner patterns for pattern matching
     const allOwnerPatterns = usePatternMatching
@@ -91,24 +112,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 
       // Determine owner_id through auto-matching or pattern matching
       let owner_id = null;
-      let bank_account_id = null;
-
-      if (autoMatch && transaction.type === "debit" && transaction.serial) {
-        // Try to match the serial number to a bank account
-        const matchingAccount = allBankAccounts.find((account) =>
-          transaction.serial!.includes(account.account_number)
-        );
-
-        if (matchingAccount) {
-          owner_id = matchingAccount.owner_id;
-          bank_account_id = matchingAccount.id;
-        }
-      }
 
       if (usePatternMatching && !owner_id) {
         // Try to match the transaction description to an owner pattern
-        const matchingPattern = allOwnerPatterns.find((pattern) =>
-          new RegExp(pattern.pattern).test(transaction.description)
+        const matchingPattern = allOwnerPatterns.find(
+          (pattern) =>
+            transaction.description &&
+            new RegExp(pattern.pattern).test(transaction.description)
         );
 
         if (matchingPattern) {
@@ -119,40 +129,58 @@ export async function action({ request, context }: Route.ActionArgs) {
       if (existingTransaction) {
         // If transaction exists, mark as duplicate but still add to the batch
         duplicatedTransactions++;
-        await context.db.insert(transactions).values({
-          type: transaction.type,
-          amount: transaction.amount,
-          description: existingTransaction.description, // Keep the existing description
-          date: transaction.date,
-          owner_id: existingTransaction.owner_id, // Keep the existing owner
-          bank_account_id: existingTransaction.bank_account_id,
-          reference: transaction.reference,
-          category: existingTransaction.category, // Keep the existing category
-          serial: transaction.serial,
-          bank_description: transaction.bank_description,
-          batch_id: batchRecord.id,
-          is_duplicate: 1, // Mark as duplicate
+        const [duplicateTransaction] = await context.db
+          .insert(transactions)
+          .values({
+            type: transaction.type,
+            amount: transaction.amount,
+            description: existingTransaction.description, // Keep the existing description
+            date: transaction.date,
+            owner_id: existingTransaction.owner_id, // Keep the existing owner
+            reference: transaction.reference,
+            category: existingTransaction.category, // Keep the existing category
+            serial: transaction.serial,
+            bank_description: transaction.bank_description,
+            batch_id: batchRecord.id,
+            is_duplicate: 1, // Mark as duplicate
+            created_at: Math.floor(Date.now() / 1000),
+            updated_at: Math.floor(Date.now() / 1000),
+          })
+          .returning();
+
+        // Add batch tag to duplicate transaction
+        await context.db.insert(transactionToTags).values({
+          transaction_id: duplicateTransaction.id,
+          tag_id: batchTag.id,
           created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
         });
       } else {
         // Create new transaction
         newTransactions++;
-        await context.db.insert(transactions).values({
-          type: transaction.type,
-          amount: transaction.amount,
-          description: transaction.description, // Initially use bank description
-          date: transaction.date,
-          owner_id,
-          bank_account_id,
-          reference: transaction.reference,
-          category: null,
-          serial: transaction.serial,
-          bank_description: transaction.bank_description,
-          batch_id: batchRecord.id,
-          is_duplicate: 0, // Not a duplicate
+        const [newTransaction] = await context.db
+          .insert(transactions)
+          .values({
+            type: transaction.type,
+            amount: transaction.amount,
+            description: transaction.description, // Initially use bank description
+            date: transaction.date,
+            owner_id,
+            reference: transaction.reference,
+            category: null,
+            serial: transaction.serial,
+            bank_description: transaction.bank_description,
+            batch_id: batchRecord.id,
+            is_duplicate: 0, // Not a duplicate
+            created_at: Math.floor(Date.now() / 1000),
+            updated_at: Math.floor(Date.now() / 1000),
+          })
+          .returning();
+
+        // Add batch tag to new transaction
+        await context.db.insert(transactionToTags).values({
+          transaction_id: newTransaction.id,
+          tag_id: batchTag.id,
           created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
         });
       }
     }

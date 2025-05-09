@@ -7,6 +7,8 @@ export default [
   route("/batches/:id", "./routes/batches.$id.tsx"),
   route("/owners", "./routes/owners.tsx"),
   route("/owners/:id", "./routes/owners.$id.tsx"),
+  route("/owners/:id/edit", "./routes/owners.$id.edit.tsx"),
+  route("/owners/:id/patterns", "./routes/owners.$id.patterns.tsx"),
   route("/transactions", "./routes/transactions.tsx"),
   route("/transactions/:id", "./routes/transactions.$id.tsx"),
 ] satisfies RouteConfig;

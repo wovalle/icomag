@@ -194,7 +194,7 @@ export default function BatchDetailPage() {
                         </td>
                         <td
                           className={
-                            transaction.type === "debit"
+                            transaction.type === "credit"
                               ? "text-success"
                               : "text-error"
                           }
@@ -202,7 +202,7 @@ export default function BatchDetailPage() {
                           {formatCurrency(transaction.amount)}
                         </td>
                         <td>
-                          {transaction.type === "debit" ? (
+                          {transaction.type === "credit" ? (
                             <div className="badge badge-success">Money In</div>
                           ) : (
                             <div className="badge badge-error">Money Out</div>

@@ -134,12 +134,14 @@ export default function TransactionTableRow({
           )}
       </td>
       <td
-        className={transaction.type === "debit" ? "text-success" : "text-error"}
+        className={
+          transaction.type === "credit" ? "text-success" : "text-error"
+        }
       >
         {formatCurrency(transaction.amount)}
       </td>
       <td>
-        {transaction.type === "debit" ? (
+        {transaction.type === "credit" ? (
           <div className="badge badge-success">Money In</div>
         ) : (
           <div className="badge badge-error">Money Out</div>

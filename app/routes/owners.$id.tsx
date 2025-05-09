@@ -1,14 +1,9 @@
-import { and, eq } from "drizzle-orm";
-import { useState } from "react";
-import { Form, Link } from "react-router";
+import { eq } from "drizzle-orm";
+import { useEffect, useState } from "react";
+import { Form, Link, useActionData, useNavigate } from "react-router";
 import type { Route } from "./+types/owners.$id";
 
-import {
-  bankAccounts,
-  ownerPatterns,
-  owners,
-  transactions,
-} from "../../database/schema";
+import { ownerPatterns, owners, transactions } from "../../database/schema";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
   const ownerId = Number.parseInt(params.id);
@@ -28,12 +23,6 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       throw new Response("Owner not found", { status: 404 });
     }
 
-    // Get all bank accounts for this owner
-    const accounts = await context.db.query.bankAccounts.findMany({
-      where: eq(bankAccounts.owner_id, ownerId),
-      orderBy: (bankAccounts, { desc }) => [desc(bankAccounts.created_at)],
-    });
-
     // Get all recognition patterns for this owner
     const patterns = await context.db.query.ownerPatterns.findMany({
       where: eq(ownerPatterns.owner_id, ownerId),
@@ -49,7 +38,6 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
     return {
       owner,
-      accounts,
       patterns,
       recentTransactions,
       error: null,
@@ -64,160 +52,18 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   }
 }
 
-export async function action({ request, params, context }: Route.ActionArgs) {
-  const path = new URL(request.url).pathname;
-  const ownerId = parseInt(params.id);
-
-  // Handle adding a new bank account
-  if (path.endsWith("/bank-accounts")) {
-    const formData = await request.formData();
-    const account_number = formData.get("account_number")?.toString() ?? "123";
-    const bank_name = formData.get("bank_name")?.toString() || null;
-    const description = formData.get("description")?.toString() || null;
-
-    try {
-      await context.db.insert(bankAccounts).values({
-        owner_id: ownerId,
-        account_number,
-        bank_name,
-        description,
-        is_active: 1,
-      });
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error adding bank account:", error);
-      return { success: false, error: "Failed to add bank account" };
-    }
-  }
-
-  // Handle adding a new recognition pattern
-  if (path.endsWith("/recognition-patterns")) {
-    const formData = await request.formData();
-    const pattern = formData.get("pattern")?.toString();
-    const description = formData.get("description")?.toString() || null;
-
-    if (!pattern) {
-      return { success: false, error: "Pattern is required" };
-    }
-
-    try {
-      // Validate the regex pattern by attempting to create a RegExp object
-      try {
-        new RegExp(pattern);
-      } catch (e) {
-        return { success: false, error: "Invalid regex pattern" };
-      }
-
-      await context.db.insert(ownerPatterns).values({
-        owner_id: ownerId,
-        pattern,
-        description,
-        is_active: 1,
-        created_at: Math.floor(Date.now() / 1000),
-        updated_at: Math.floor(Date.now() / 1000),
-      });
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error adding recognition pattern:", error);
-      return { success: false, error: "Failed to add recognition pattern" };
-    }
-  }
-
-  // Handle toggling pattern status
-  if (path.match(/\/recognition-patterns\/\d+\/toggle$/)) {
-    const matches = path.match(/\/recognition-patterns\/(\d+)\/toggle$/);
-    const patternId = matches ? parseInt(matches[1]) : 0;
-
-    try {
-      const pattern = await context.db.query.ownerPatterns.findFirst({
-        where: and(
-          eq(ownerPatterns.id, patternId),
-          eq(ownerPatterns.owner_id, ownerId)
-        ),
-      });
-
-      if (!pattern) {
-        return { success: false, error: "Recognition pattern not found" };
-      }
-
-      await context.db
-        .update(ownerPatterns)
-        .set({
-          is_active: pattern.is_active ? 0 : 1,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(ownerPatterns.id, patternId));
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error toggling pattern status:", error);
-      return { success: false, error: "Failed to update pattern status" };
-    }
-  }
-
-  // Handle deleting a pattern
-  if (path.match(/\/recognition-patterns\/\d+\/delete$/)) {
-    const matches = path.match(/\/recognition-patterns\/(\d+)\/delete$/);
-    const patternId = matches ? parseInt(matches[1]) : 0;
-
-    try {
-      await context.db
-        .delete(ownerPatterns)
-        .where(
-          and(
-            eq(ownerPatterns.id, patternId),
-            eq(ownerPatterns.owner_id, ownerId)
-          )
-        );
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error deleting pattern:", error);
-      return { success: false, error: "Failed to delete pattern" };
-    }
-  }
-
-  // Handle toggling bank account status
-  if (path.match(/\/bank-accounts\/\d+\/toggle$/)) {
-    const matches = path.match(/\/bank-accounts\/(\d+)\/toggle$/);
-    const accountId = matches ? parseInt(matches[1]) : 0;
-
-    try {
-      const account = await context.db.query.bankAccounts.findFirst({
-        where: and(
-          eq(bankAccounts.id, accountId),
-          eq(bankAccounts.owner_id, ownerId)
-        ),
-      });
-
-      if (!account) {
-        return { success: false, error: "Bank account not found" };
-      }
-
-      await context.db
-        .update(bankAccounts)
-        .set({
-          is_active: account.is_active ? 0 : 1,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(bankAccounts.id, accountId));
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error toggling bank account status:", error);
-      return { success: false, error: "Failed to update bank account status" };
-    }
-  }
-
-  return { success: false, error: "Invalid action" };
-}
-
 export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
-  const { owner, accounts, patterns, recentTransactions, error } = loaderData;
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { owner, patterns, recentTransactions, error } = loaderData;
+  const actionData = useActionData<any>();
+  const navigate = useNavigate();
   const [isPatternModalOpen, setIsPatternModalOpen] = useState(false);
+
+  // Handle action results, including redirects
+  useEffect(() => {
+    if (actionData?.success && actionData?.redirect) {
+      navigate(actionData.redirect);
+    }
+  }, [actionData, navigate]);
 
   // Format currency function
   const formatCurrency = (amount: number) => {
@@ -316,70 +162,6 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {/* Bank Accounts Section */}
-      <div className="card shadow-md mb-6">
-        <div className="card-body">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="card-title">Bank Accounts</h2>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="btn btn-primary btn-sm"
-            >
-              Add Bank Account
-            </button>
-          </div>
-
-          {accounts.length === 0 ? (
-            <div className="text-center py-4">
-              <p>
-                No bank accounts found. Add a bank account to automatically
-                match transactions.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="table table-zebra">
-                <thead>
-                  <tr>
-                    <th>Bank Name</th>
-                    <th>Account Number</th>
-                    <th>Description</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accounts.map((account) => (
-                    <tr key={account.id}>
-                      <td>{account.bank_name || "N/A"}</td>
-                      <td>{account.account_number}</td>
-                      <td>{account.description || "N/A"}</td>
-                      <td>
-                        {account.is_active ? (
-                          <div className="badge badge-success">Active</div>
-                        ) : (
-                          <div className="badge badge-error">Inactive</div>
-                        )}
-                      </td>
-                      <td>
-                        <Form
-                          method="post"
-                          action={`/owners/${owner.id}/bank-accounts/${account.id}/toggle`}
-                        >
-                          <button type="submit" className="btn btn-sm">
-                            {account.is_active ? "Deactivate" : "Activate"}
-                          </button>
-                        </Form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Recognition Patterns Section */}
       <div className="card shadow-md mb-6">
         <div className="card-body">
@@ -426,16 +208,22 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                       <td className="flex gap-2">
                         <Form
                           method="post"
-                          action={`/owners/${owner.id}/recognition-patterns/${pattern.id}/toggle`}
+                          action={`/owners/${owner.id}/patterns`}
                           className="inline"
                         >
+                          <input type="hidden" name="intent" value="toggle" />
+                          <input
+                            type="hidden"
+                            name="patternId"
+                            value={pattern.id}
+                          />
                           <button type="submit" className="btn btn-sm">
                             {pattern.is_active ? "Deactivate" : "Activate"}
                           </button>
                         </Form>
                         <Form
                           method="post"
-                          action={`/owners/${owner.id}/recognition-patterns/${pattern.id}/delete`}
+                          action={`/owners/${owner.id}/patterns`}
                           className="inline"
                           onSubmit={(e) => {
                             if (
@@ -447,6 +235,12 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                             }
                           }}
                         >
+                          <input type="hidden" name="intent" value="delete" />
+                          <input
+                            type="hidden"
+                            name="patternId"
+                            value={pattern.id}
+                          />
                           <button
                             type="submit"
                             className="btn btn-sm btn-error"
@@ -499,7 +293,7 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                       <td>{transaction.description}</td>
                       <td
                         className={
-                          transaction.type === "debit"
+                          transaction.type === "credit"
                             ? "text-success"
                             : "text-error"
                         }
@@ -507,7 +301,7 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                         {formatCurrency(transaction.amount)}
                       </td>
                       <td>
-                        {transaction.type === "debit" ? (
+                        {transaction.type === "credit" ? (
                           <div className="badge badge-success">Money In</div>
                         ) : (
                           <div className="badge badge-error">Money Out</div>
@@ -522,78 +316,13 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {/* Add Bank Account Modal */}
-      {isModalOpen && (
-        <dialog open className="modal">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg">Add Bank Account</h3>
-            <Form method="post" action={`/owners/${owner.id}/bank-accounts`}>
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Account Number</span>
-                </label>
-                <input
-                  type="text"
-                  name="account_number"
-                  placeholder="Enter account number"
-                  className="input input-bordered"
-                  required
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Bank Name</span>
-                </label>
-                <input
-                  type="text"
-                  name="bank_name"
-                  placeholder="Enter bank name"
-                  className="input input-bordered"
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Description</span>
-                </label>
-                <input
-                  type="text"
-                  name="description"
-                  placeholder="e.g. Main Account, Savings Account"
-                  className="input input-bordered"
-                />
-              </div>
-
-              <div className="modal-action">
-                <button type="submit" className="btn btn-primary">
-                  Save
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </Form>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button onClick={() => setIsModalOpen(false)}>close</button>
-          </form>
-        </dialog>
-      )}
-
       {/* Add Recognition Pattern Modal */}
       {isPatternModalOpen && (
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Add Recognition Pattern</h3>
-            <Form
-              method="post"
-              action={`/owners/${owner.id}/recognition-patterns`}
-            >
+            <Form method="post" action={`/owners/${owner.id}/patterns`}>
+              <input type="hidden" name="intent" value="create" />
               <div className="form-control">
                 <label className="label">
                   <span className="label-text">Pattern</span>
