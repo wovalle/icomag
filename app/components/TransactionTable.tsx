@@ -1,28 +1,6 @@
+import type { Owner, Tag, Transaction } from "../types";
 import Pagination from "./Pagination";
 import TransactionTableRow from "./TransactionTableRow";
-
-interface Tag {
-  id: number;
-  name: string;
-  color: string;
-}
-
-interface Owner {
-  id: number;
-  name: string;
-  apartment_id: string;
-}
-
-interface Transaction {
-  id: number;
-  date: number;
-  description: string;
-  bank_description: string;
-  amount: number;
-  type: string;
-  owner_id: number | null;
-  tags: Tag[];
-}
 
 interface TransactionTableProps {
   transactions: Transaction[];

@@ -7,6 +7,7 @@ import {
   transactionToTags,
   transactions,
 } from "../../database/schema";
+import type { Owner, Tag, Transaction, TransactionWithDetails } from "../types";
 
 export type DB = DrizzleD1Database<typeof schema>;
 
@@ -205,7 +206,7 @@ export class TransactionService {
     reference?: string | null;
     category?: string | null;
     tag_ids?: string[];
-  }): Promise<{ success: boolean; transaction?: any; error?: string }> {
+  }): Promise<{ success: boolean; transaction?: Transaction; error?: string }> {
     try {
       // Convert date string to unix timestamp
       const date = Math.floor(new Date(transactionData.date).getTime() / 1000);
@@ -242,7 +243,7 @@ export class TransactionService {
         await this.db.insert(transactionToTags).values(tagValues);
       }
 
-      return { success: true, transaction };
+      return { success: true, transaction: transaction as Transaction };
     } catch (error) {
       console.error("Error creating transaction:", error);
       return { success: false, error: "Failed to create transaction" };
@@ -270,7 +271,17 @@ export class TransactionService {
     searchTerm?: string | null;
     page?: number;
     limit?: number;
-  }) {
+  }): Promise<{
+    transactions: TransactionWithDetails[];
+    pagination: {
+      totalCount: number;
+      pageCount: number;
+      currentPage: number;
+      limit: number;
+    };
+    success: boolean;
+    error?: string;
+  }> {
     try {
       // Build the where clause based on filters
       let whereClause = [];
@@ -400,7 +411,7 @@ export class TransactionService {
       const enhancedTransactions = transactionsList.map((transaction) => ({
         ...transaction,
         tags: transactionTagsMap[transaction.id] || [],
-      }));
+      })) as TransactionWithDetails[];
 
       return {
         transactions: enhancedTransactions,
@@ -431,7 +442,11 @@ export class TransactionService {
   /**
    * Get all owners
    */
-  async getOwners() {
+  async getOwners(): Promise<{
+    owners: Owner[];
+    success: boolean;
+    error?: string;
+  }> {
     try {
       const ownersList = await this.db.query.owners.findMany({
         where: eq(owners.is_active, 1),
@@ -439,7 +454,7 @@ export class TransactionService {
       });
 
       return {
-        owners: ownersList,
+        owners: ownersList as Owner[],
         success: true,
       };
     } catch (error) {
@@ -455,7 +470,11 @@ export class TransactionService {
   /**
    * Get all tags
    */
-  async getTags() {
+  async getTags(): Promise<{
+    tags: Tag[];
+    success: boolean;
+    error?: string;
+  }> {
     try {
       const tagsList = await this.db.query.transactionTags.findMany({
         orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
@@ -465,7 +484,7 @@ export class TransactionService {
       });
 
       return {
-        tags: tagsList,
+        tags: tagsList as Tag[],
         success: true,
       };
     } catch (error) {

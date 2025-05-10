@@ -1,15 +1,5 @@
 import { useState } from "react";
-
-interface Owner {
-  id: number;
-  name: string;
-  apartment_id: string;
-}
-
-interface Tag {
-  id: number;
-  name: string;
-}
+import type { Owner, Tag } from "../types";
 
 interface TransactionFiltersProps {
   owners: Owner[];
