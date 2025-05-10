@@ -21,7 +21,6 @@ export async function loader() {
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const file = formData.get("csvFile");
-  const autoMatch = formData.get("autoMatch") === "on";
   const usePatternMatching = formData.get("usePatternMatching") === "on";
 
   if (!file || !(file instanceof File)) {
@@ -284,31 +283,13 @@ export default function ImportBatchPage() {
           <div className="form-control mb-6">
             <label className="label cursor-pointer justify-start">
               <span className="label-text mr-4">
-                Auto-match transactions to owners based on bank accounts
-              </span>
-              <input
-                type="checkbox"
-                name="autoMatch"
-                className="checkbox"
-                defaultChecked
-              />
-            </label>
-            <p className="text-sm text-gray-500">
-              When enabled, the system will automatically link transactions to
-              owners based on the bank account number found in the transaction
-              details.
-            </p>
-          </div>
-
-          <div className="form-control mb-6">
-            <label className="label cursor-pointer justify-start">
-              <span className="label-text mr-4">
                 Use pattern matching for owner identification
               </span>
               <input
                 type="checkbox"
                 name="usePatternMatching"
                 className="checkbox"
+                defaultChecked
               />
             </label>
             <p className="text-sm text-gray-500">

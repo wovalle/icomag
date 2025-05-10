@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, useLoaderData } from "react-router";
+import { Form, useFetcher, useLoaderData } from "react-router";
 
 import { transactionTags } from "../../database/schema";
 import type { Route } from "./+types/tags";
@@ -8,6 +8,9 @@ export async function loader({ context }: Route.LoaderArgs) {
   try {
     const tagsList = await context.db.query.transactionTags.findMany({
       orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
+      with: {
+        parentTag: true,
+      },
     });
 
     return { tags: tagsList, error: null };
@@ -23,6 +26,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const description = formData.get("description") || null;
   const color = formData.get("colorHex");
   const method = formData.get("_method");
+  const parentId = formData.get("parent_id") || null;
 
   if (method === "patch") {
     // This is handled by the route for editing a specific tag
@@ -34,6 +38,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       name,
       description,
       color,
+      parent_id: parentId ? parseInt(parentId as string) : null,
       created_at: Math.floor(Date.now() / 1000),
       updated_at: Math.floor(Date.now() / 1000),
     });
@@ -49,6 +54,7 @@ export default function TagsIndex() {
   const { tags, error } = useLoaderData<typeof loader>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState(null);
+  const fetcher = useFetcher();
 
   const openEditModal = (tag) => {
     setEditingTag(tag);
@@ -98,6 +104,12 @@ export default function TagsIndex() {
                   <div className="badge badge-ghost">{tag.color}</div>
                 </div>
                 {tag.description && <p>{tag.description}</p>}
+                {tag.parentTag && (
+                  <p className="text-sm">
+                    Parent:{" "}
+                    <span className="font-medium">{tag.parentTag.name}</span>
+                  </p>
+                )}
                 <div className="card-actions justify-end mt-2">
                   <button
                     onClick={() => openEditModal(tag)}
@@ -105,11 +117,11 @@ export default function TagsIndex() {
                   >
                     Edit
                   </button>
-                  <Form method="post" action={`/tags/${tag.id}/delete`}>
+                  <fetcher.Form method="delete" action={`/tags/${tag.id}`}>
                     <button type="submit" className="btn btn-sm btn-error">
                       Delete
                     </button>
-                  </Form>
+                  </fetcher.Form>
                 </div>
               </div>
             </div>
@@ -160,6 +172,29 @@ export default function TagsIndex() {
               </div>
 
               <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Parent Tag</span>
+                </label>
+                <select
+                  name="parent_id"
+                  className="select select-bordered"
+                  defaultValue={editingTag?.parent_id || ""}
+                >
+                  <option value="">No parent</option>
+                  {tags
+                    .filter((tag) => !editingTag || tag.id !== editingTag.id)
+                    .map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                </select>
+                <span className="text-xs mt-1">
+                  Use this to create hierarchical tag relationships
+                </span>
+              </div>
+
+              <div className="form-control mt-4">
                 <label className="label">
                   <span className="label-text">Color</span>
                 </label>

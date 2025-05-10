@@ -1,28 +1,6 @@
-import { useRef, useState } from "react";
-import { Link } from "react-router";
-
-interface Tag {
-  id: number;
-  name: string;
-  color: string;
-}
-
-interface Owner {
-  id: number;
-  name: string;
-  apartment_id: string;
-}
-
-interface Transaction {
-  id: number;
-  date: number;
-  description: string;
-  bank_description: string;
-  amount: number;
-  type: string;
-  owner_id: number | null;
-  tags: Tag[];
-}
+import { useEffect, useRef, useState } from "react";
+import { Link, useFetcher } from "react-router";
+import type { Owner, Tag, Transaction } from "../types";
 
 interface TransactionTableRowProps {
   transaction: Transaction;
@@ -52,8 +30,9 @@ export default function TransactionTableRow({
 }: TransactionTableRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
-  const [selectedTagId, setSelectedTagId] = useState("");
   const descriptionInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const autoAssignFetcher = useFetcher();
 
   // Start editing description
   const startEditingDescription = () => {
@@ -81,12 +60,45 @@ export default function TransactionTableRow({
     setIsEditing(false);
   };
 
-  // Handle tag addition
-  const handleAddTag = async () => {
-    if (!selectedTagId) return;
-    await onAddTag(transaction.id, selectedTagId);
-    setSelectedTagId("");
+  // Handle tag selection (now with auto-save)
+  const handleTagChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const tagId = e.target.value;
+    if (tagId) {
+      await onAddTag(transaction.id, tagId);
+      e.target.value = ""; // Reset select after adding
+    }
   };
+
+  // Handle auto-assign owner
+  const handleAutoAssignOwner = () => {
+    // Close the menu after clicking
+    if (menuRef.current) {
+      menuRef.current.open = false;
+    }
+
+    // Create form data for auto-assign request
+    const formData = new FormData();
+    formData.append("intent", "autoAssignOwner");
+    formData.append("transaction_id", transaction.id.toString());
+
+    // Use the fetcher to submit this form
+    autoAssignFetcher.submit(formData, {
+      method: "POST",
+      action: "/transactions",
+    });
+  };
+
+  // Update owner when auto-assign completes successfully
+  useEffect(() => {
+    if (
+      autoAssignFetcher.data &&
+      autoAssignFetcher.data.success &&
+      autoAssignFetcher.data.owner_id !== null
+    ) {
+      // If successful and an owner was found, update the local state
+      onOwnerChange(transaction.id, autoAssignFetcher.data.owner_id.toString());
+    }
+  }, [autoAssignFetcher.data, transaction.id, onOwnerChange]);
 
   return (
     <tr>
@@ -97,7 +109,7 @@ export default function TransactionTableRow({
             <input
               ref={descriptionInputRef}
               type="text"
-              className="input input-bordered input-sm mr-1 w-full"
+              className="input input-sm w-full"
               value={editedDescription}
               onChange={(e) => setEditedDescription(e.target.value)}
               onKeyDown={(e) => {
@@ -108,16 +120,24 @@ export default function TransactionTableRow({
                 }
               }}
             />
-            <button className="btn btn-sm btn-ghost" onClick={saveDescription}>
-              Save
-            </button>
-            <button className="btn btn-sm btn-ghost" onClick={cancelEditing}>
-              Cancel
-            </button>
+            <div className="join">
+              <button
+                className="btn btn-sm join-item"
+                onClick={saveDescription}
+              >
+                Save
+              </button>
+              <button
+                className="btn btn-sm btn-ghost join-item"
+                onClick={cancelEditing}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         ) : (
           <div
-            className="cursor-pointer hover:bg-base-200 p-1 rounded"
+            className="cursor-pointer hover:bg-base-200 rounded p-2"
             onClick={startEditingDescription}
             title="Click to edit"
           >
@@ -128,7 +148,7 @@ export default function TransactionTableRow({
         )}
         {transaction.bank_description &&
           transaction.description !== transaction.bank_description && (
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs text-base-content/60 mt-1">
               Original: {transaction.bank_description}
             </div>
           )}
@@ -149,7 +169,7 @@ export default function TransactionTableRow({
       </td>
       <td>
         <select
-          className="select select-bordered select-sm w-full max-w-xs"
+          className="select select-sm select-bordered w-full max-w-xs"
           value={transaction.owner_id || ""}
           onChange={(e) => onOwnerChange(transaction.id, e.target.value)}
         >
@@ -182,9 +202,9 @@ export default function TransactionTableRow({
         </div>
         <div className="flex">
           <select
-            className="select select-bordered select-xs w-full max-w-[120px]"
-            value={selectedTagId}
-            onChange={(e) => setSelectedTagId(e.target.value)}
+            className="select select-xs select-bordered w-full"
+            defaultValue=""
+            onChange={handleTagChange}
           >
             <option value="">Add tag...</option>
             {tags.map((tag) => (
@@ -193,24 +213,41 @@ export default function TransactionTableRow({
               </option>
             ))}
           </select>
-          <button
-            className="btn btn-xs ml-1"
-            disabled={!selectedTagId}
-            onClick={handleAddTag}
-          >
-            Add
-          </button>
         </div>
       </td>
       <td>
-        <div className="join">
-          <Link
-            to={`/transactions/${transaction.id}`}
-            className="btn btn-sm btn-outline join-item"
-          >
-            Details
-          </Link>
-        </div>
+        <details ref={menuRef} className="dropdown dropdown-end">
+          <summary className="btn btn-sm btn-circle">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-5 h-5"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
+              />
+            </svg>
+          </summary>
+          <ul className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-10">
+            <li>
+              <Link to={`/transactions/${transaction.id}`}>View Details</Link>
+            </li>
+            <li>
+              <button
+                onClick={handleAutoAssignOwner}
+                className={autoAssignFetcher.state !== "idle" ? "loading" : ""}
+                disabled={autoAssignFetcher.state !== "idle"}
+              >
+                Auto-assign Owner
+              </button>
+            </li>
+          </ul>
+        </details>
       </td>
     </tr>
   );

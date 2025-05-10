@@ -1,5 +1,11 @@
 import { relations } from "drizzle-orm";
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  foreignKey,
+  integer,
+  real,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 
 export const guestBook = sqliteTable("guest_book", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -77,18 +83,32 @@ export const transactions = sqliteTable("transactions", {
 });
 
 // Transaction tags table
-export const transactionTags = sqliteTable("transaction_tags", {
-  id: integer().primaryKey({ autoIncrement: true }),
-  name: text().notNull().unique(),
-  description: text(),
-  color: text(), // Optional color for UI display
-  created_at: integer()
-    .notNull()
-    .$defaultFn(() => Math.floor(Date.now() / 1000)),
-  updated_at: integer()
-    .notNull()
-    .$defaultFn(() => Math.floor(Date.now() / 1000)),
-});
+export const transactionTags = sqliteTable(
+  "transaction_tags",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    name: text().notNull().unique(),
+    description: text(),
+    color: text(), // Optional color for UI display
+    parent_id: integer(), // Parent tag reference
+    created_at: integer()
+      .notNull()
+      .$defaultFn(() => Math.floor(Date.now() / 1000)),
+    updated_at: integer()
+      .notNull()
+      .$defaultFn(() => Math.floor(Date.now() / 1000)),
+  },
+  (table) => {
+    return {
+      // Define a foreign key constraint for th e parent_id
+      parentTag: foreignKey({
+        columns: [table.parent_id],
+        foreignColumns: [table.id],
+        name: "transaction_tags_parent_id_fk",
+      }).onDelete("set null"),
+    };
+  }
+);
 
 // Transaction to Tags many-to-many relationship table
 export const transactionToTags = sqliteTable("transaction_to_tags", {
@@ -145,8 +165,14 @@ export const transactionBatchesRelations = relations(
 // Define relations for transaction tags
 export const transactionTagsRelations = relations(
   transactionTags,
-  ({ many }) => ({
+  ({ many, one }) => ({
     transactionToTags: many(transactionToTags),
+    childTags: many(transactionTags, { relationName: "parentChildTags" }),
+    parentTag: one(transactionTags, {
+      fields: [transactionTags.parent_id],
+      references: [transactionTags.id],
+      relationName: "parentChildTags",
+    }),
   })
 );
 

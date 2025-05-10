@@ -1,26 +1,15 @@
-import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { useState } from "react";
-import { Link, useLoaderData, useSearchParams } from "react-router";
-import {
-  owners,
-  transactionTags,
-  transactionToTags,
-  transactions,
-} from "../../database/schema";
+import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import AddTransactionModal from "../components/AddTransactionModal";
 import TransactionFilters from "../components/TransactionFilters";
 import TransactionTable from "../components/TransactionTable";
-import {
-  addTagToTransaction,
-  assignOwnerToTransaction,
-  formatters,
-  removeTagFromTransaction,
-  updateTransactionDescription,
-} from "../services/transactionService";
+import { TransactionService, formatters } from "../services/transactionService";
 import type { Route } from "./+types/transactions";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   try {
+    const transactionService = new TransactionService(context.db);
+
     // Get filter params from URL
     const url = new URL(request.url);
     const ownerId = url.searchParams.get("ownerId");
@@ -31,144 +20,28 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     const page = parseInt(url.searchParams.get("page") || "1");
     const searchTerm = url.searchParams.get("search") || "";
     const limit = 20;
-    const offset = (page - 1) * limit;
 
-    // Build the where clause based on filters
-    let whereClause = [];
-
-    if (ownerId) {
-      whereClause.push(eq(transactions.owner_id, parseInt(ownerId)));
-    }
-
-    if (transactionType) {
-      whereClause.push(eq(transactions.type, transactionType));
-    }
-
-    // Add date range filters
-    if (startDate) {
-      const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
-      whereClause.push(gte(transactions.date, startTimestamp));
-    }
-
-    if (endDate) {
-      // Set to end of day for the end date
-      const endTimestamp = Math.floor(
-        new Date(endDate + "T23:59:59").getTime() / 1000
-      );
-      whereClause.push(lte(transactions.date, endTimestamp));
-    }
-
-    if (searchTerm) {
-      whereClause.push(
-        sql`(${transactions.description} LIKE ${"%" + searchTerm + "%"} OR 
-            ${transactions.bank_description} LIKE ${"%" + searchTerm + "%"} OR 
-            ${transactions.reference} LIKE ${"%" + searchTerm + "%"} OR 
-            ${transactions.serial} LIKE ${"%" + searchTerm + "%"})`
-      );
-    }
-
-    // Base query for transactions, always filtering out duplicates
-    const baseQuery =
-      whereClause.length > 0
-        ? and(eq(transactions.is_duplicate, 0), ...whereClause)
-        : eq(transactions.is_duplicate, 0);
-
-    // Count total transactions for pagination
-    const totalCountResult = await context.db
-      .select({ count: sql`count(*)` })
-      .from(transactions)
-      .where(baseQuery);
-
-    const totalCount = Number(totalCountResult[0]?.count || 0);
-
-    // Get transactions with pagination
-    let transactionsList = await context.db.query.transactions.findMany({
-      where: baseQuery,
-      orderBy: (transactions, { desc }) => [desc(transactions.date)],
-      limit: limit,
-      offset: offset,
-      with: {
-        owner: true,
-      },
+    // Get transactions with filters
+    const transactionsResult = await transactionService.getTransactions({
+      ownerId,
+      transactionType,
+      tagId,
+      startDate,
+      endDate,
+      searchTerm,
+      page,
+      limit,
     });
 
-    // If filtering by tag, we need to manually filter the results
-    // This is a workaround since drizzle doesn't support many-to-many relation filtering directly
-    if (tagId) {
-      const transactionsWithTag = await context.db
-        .select({ transaction_id: transactionToTags.transaction_id })
-        .from(transactionToTags)
-        .where(eq(transactionToTags.tag_id, parseInt(tagId)));
-
-      const transactionIdsWithTag = transactionsWithTag.map(
-        (t) => t.transaction_id
-      );
-
-      transactionsList = transactionsList.filter((transaction) =>
-        transactionIdsWithTag.includes(transaction.id)
-      );
-    }
-
-    // Load tags for each transaction
-    const transactionIds = transactionsList.map((t) => t.id);
-
-    // Get all transaction to tag relationships for these transactions
-    const transactionTagRelations =
-      transactionIds.length > 0
-        ? await context.db
-            .select()
-            .from(transactionToTags)
-            .innerJoin(
-              transactionTags,
-              eq(transactionToTags.tag_id, transactionTags.id)
-            )
-            .where(
-              sql`${transactionToTags.transaction_id} IN (${sql.join(
-                transactionIds,
-                sql`, `
-              )})`
-            )
-        : [];
-
-    // Group tags by transaction id
-    const transactionTagsMap = transactionTagRelations.reduce(
-      (acc, { transaction_to_tags, transaction_tags }) => {
-        if (!acc[transaction_to_tags.transaction_id]) {
-          acc[transaction_to_tags.transaction_id] = [];
-        }
-        acc[transaction_to_tags.transaction_id].push(transaction_tags);
-        return acc;
-      },
-      {}
-    );
-
-    // Add tags to each transaction
-    const enhancedTransactions = transactionsList.map((transaction) => ({
-      ...transaction,
-      tags: transactionTagsMap[transaction.id] || [],
-    }));
-
-    // Load all owners for the dropdown
-    const ownersList = await context.db.query.owners.findMany({
-      where: eq(owners.is_active, 1),
-      orderBy: (owners, { asc }) => [asc(owners.name)],
-    });
-
-    // Load all tags for filtering and assignment
-    const tagsList = await context.db.query.transactionTags.findMany({
-      orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
-    });
+    // Get owners and tags
+    const ownersResult = await transactionService.getOwners();
+    const tagsResult = await transactionService.getTags();
 
     return {
-      transactions: enhancedTransactions,
-      owners: ownersList,
-      tags: tagsList,
-      pagination: {
-        totalCount,
-        pageCount: Math.ceil(totalCount / limit),
-        currentPage: page,
-        limit,
-      },
+      transactions: transactionsResult.transactions || [],
+      owners: ownersResult.owners || [],
+      tags: tagsResult.tags || [],
+      pagination: transactionsResult.pagination,
       filters: {
         ownerId,
         transactionType,
@@ -177,7 +50,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         startDate,
         endDate,
       },
-      error: null,
+      error:
+        transactionsResult.error ||
+        ownersResult.error ||
+        tagsResult.error ||
+        null,
     };
   } catch (error) {
     console.error("Error loading transactions:", error);
@@ -198,143 +75,78 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const transactionService = new TransactionService(context.db);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   if (intent === "create") {
-    const type = formData.get("type");
-    const amount = parseFloat(formData.get("amount"));
-    const description = formData.get("description");
-    const dateValue = formData.get("date");
-    const owner_id = formData.get("owner_id") || null;
-    const reference = formData.get("reference") || null;
-    const category = formData.get("category") || null;
-    const tagIds = formData.getAll("tag_ids");
+    const type = formData.get("type") as string;
+    const amount = parseFloat(formData.get("amount") as string);
+    const description = formData.get("description") as string;
+    const dateValue = formData.get("date") as string;
+    const owner_id = formData.get("owner_id")?.toString() || null;
+    const reference = formData.get("reference")?.toString() || null;
+    const category = formData.get("category")?.toString() || null;
+    const tagIds = formData.getAll("tag_ids").map((id) => id.toString());
 
-    // Convert date string to unix timestamp
-    const date = Math.floor(new Date(dateValue).getTime() / 1000);
+    const result = await transactionService.createTransaction({
+      type,
+      amount,
+      description,
+      date: dateValue,
+      owner_id,
+      reference,
+      category,
+      tag_ids: tagIds,
+    });
 
-    try {
-      // Insert the transaction
-      const [transaction] = await context.db
-        .insert(transactions)
-        .values({
-          type,
-          amount,
-          description,
-          date,
-          owner_id,
-          reference,
-          category,
-          created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .returning();
-
-      // Add tags if any were selected
-      if (tagIds.length > 0) {
-        const tagValues = tagIds.map((tagId) => ({
-          transaction_id: transaction.id,
-          tag_id: parseInt(tagId),
-          created_at: Math.floor(Date.now() / 1000),
-        }));
-
-        await context.db.insert(transactionToTags).values(tagValues);
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error creating transaction:", error);
-      return { success: false, error: "Failed to create transaction" };
-    }
+    return { success: result.success, error: result.error };
   } else if (intent === "updateDescription") {
-    const id = formData.get("id");
-    const description = formData.get("description");
+    const id = parseInt(formData.get("id") as string);
+    const description = formData.get("description") as string;
 
-    try {
-      await context.db
-        .update(transactions)
-        .set({
-          description,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, parseInt(id)));
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error updating transaction description:", error);
-      return {
-        success: false,
-        error: "Failed to update transaction description",
-      };
-    }
+    const result = await transactionService.updateTransactionDescription(
+      id,
+      description
+    );
+    return { success: result.success, error: result.error };
   } else if (intent === "assignOwner") {
-    const id = formData.get("id");
-    const owner_id = formData.get("owner_id") || null;
+    const id = parseInt(formData.get("id") as string);
+    const owner_id = formData.get("owner_id")?.toString() || null;
 
-    try {
-      await context.db
-        .update(transactions)
-        .set({
-          owner_id,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, parseInt(id)));
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error assigning owner to transaction:", error);
-      return { success: false, error: "Failed to assign owner to transaction" };
-    }
+    const result = await transactionService.assignOwnerToTransaction(
+      id,
+      owner_id
+    );
+    return { success: result.success, error: result.error };
   } else if (intent === "addTag") {
-    const transaction_id = parseInt(formData.get("transaction_id"));
-    const tag_id = parseInt(formData.get("tag_id"));
+    const transaction_id = parseInt(formData.get("transaction_id") as string);
+    const tag_id = formData.get("tag_id") as string;
 
-    try {
-      // Check if the tag is already assigned to the transaction
-      const existingTag = await context.db
-        .select()
-        .from(transactionToTags)
-        .where(
-          and(
-            eq(transactionToTags.transaction_id, transaction_id),
-            eq(transactionToTags.tag_id, tag_id)
-          )
-        )
-        .limit(1);
-
-      if (existingTag.length === 0) {
-        await context.db.insert(transactionToTags).values({
-          transaction_id,
-          tag_id,
-          created_at: Math.floor(Date.now() / 1000),
-        });
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error adding tag to transaction:", error);
-      return { success: false, error: "Failed to add tag to transaction" };
-    }
+    const result = await transactionService.addTagToTransaction(
+      transaction_id,
+      tag_id
+    );
+    return { success: result.success, error: result.error };
   } else if (intent === "removeTag") {
-    const transaction_id = parseInt(formData.get("transaction_id"));
-    const tag_id = parseInt(formData.get("tag_id"));
+    const transaction_id = parseInt(formData.get("transaction_id") as string);
+    const tag_id = parseInt(formData.get("tag_id") as string);
 
-    try {
-      await context.db
-        .delete(transactionToTags)
-        .where(
-          and(
-            eq(transactionToTags.transaction_id, transaction_id),
-            eq(transactionToTags.tag_id, tag_id)
-          )
-        );
+    const result = await transactionService.removeTagFromTransaction(
+      transaction_id,
+      tag_id
+    );
+    return { success: result.success, error: result.error };
+  } else if (intent === "autoAssignOwner") {
+    // Handle auto-assigning an owner based on transaction description
+    const transaction_id = parseInt(formData.get("transaction_id") as string);
 
-      return { success: true };
-    } catch (error) {
-      console.error("Error removing tag from transaction:", error);
-      return { success: false, error: "Failed to remove tag from transaction" };
-    }
+    const result = await transactionService.autoAssignOwner(transaction_id);
+    return {
+      success: result.success,
+      owner_id: result.owner_id,
+      error: result.error,
+    };
   }
 
   return { success: false, error: "Invalid action" };
@@ -346,6 +158,7 @@ export default function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const fetcher = useFetcher<typeof action>();
 
   // Handle filter application
   const applyFilters = (filters: {
@@ -387,38 +200,59 @@ export default function TransactionsPage() {
     description: string
   ) => {
     setActionError(null);
-    const result = await updateTransactionDescription(
-      transactionId,
-      description
-    );
-    if (!result.success && result.error) {
-      setActionError(result.error);
+    const formData = new FormData();
+    formData.append("intent", "updateDescription");
+    formData.append("id", transactionId.toString());
+    formData.append("description", description);
+
+    fetcher.submit(formData, { method: "POST" });
+
+    if (fetcher.data?.error) {
+      setActionError(fetcher.data.error);
     }
   };
 
   // Handle owner assignment
   const handleOwnerChange = async (transactionId: number, ownerId: string) => {
     setActionError(null);
-    const result = await assignOwnerToTransaction(transactionId, ownerId);
-    if (!result.success && result.error) {
-      setActionError(result.error);
+    const formData = new FormData();
+    formData.append("intent", "assignOwner");
+    formData.append("id", transactionId.toString());
+    formData.append("owner_id", ownerId);
+
+    fetcher.submit(formData, { method: "POST" });
+
+    if (fetcher.data?.error) {
+      setActionError(fetcher.data.error);
     }
   };
 
   // Handle tag operations
   const handleAddTag = async (transactionId: number, tagId: string) => {
     setActionError(null);
-    const result = await addTagToTransaction(transactionId, tagId);
-    if (!result.success && result.error) {
-      setActionError(result.error);
+    const formData = new FormData();
+    formData.append("intent", "addTag");
+    formData.append("transaction_id", transactionId.toString());
+    formData.append("tag_id", tagId);
+
+    fetcher.submit(formData, { method: "POST" });
+
+    if (fetcher.data?.error) {
+      setActionError(fetcher.data.error);
     }
   };
 
   const handleRemoveTag = async (transactionId: number, tagId: number) => {
     setActionError(null);
-    const result = await removeTagFromTransaction(transactionId, tagId);
-    if (!result.success && result.error) {
-      setActionError(result.error);
+    const formData = new FormData();
+    formData.append("intent", "removeTag");
+    formData.append("transaction_id", transactionId.toString());
+    formData.append("tag_id", tagId.toString());
+
+    fetcher.submit(formData, { method: "POST" });
+
+    if (fetcher.data?.error) {
+      setActionError(fetcher.data.error);
     }
   };
 
