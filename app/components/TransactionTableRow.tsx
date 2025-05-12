@@ -15,6 +15,7 @@ interface TransactionTableRowProps {
   onOwnerChange: (transactionId: number, ownerId: string) => Promise<void>;
   onAddTag: (transactionId: number, tagId: string) => Promise<void>;
   onRemoveTag: (transactionId: number, tagId: number) => Promise<void>;
+  isAdmin?: boolean;
 }
 
 export default function TransactionTableRow({
@@ -27,6 +28,7 @@ export default function TransactionTableRow({
   onOwnerChange,
   onAddTag,
   onRemoveTag,
+  isAdmin = false,
 }: TransactionTableRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
@@ -36,6 +38,8 @@ export default function TransactionTableRow({
 
   // Start editing description
   const startEditingDescription = () => {
+    if (!isAdmin) return;
+
     setIsEditing(true);
     setEditedDescription(
       transaction.description || transaction.bank_description || ""
@@ -51,6 +55,7 @@ export default function TransactionTableRow({
 
   // Save description
   const saveDescription = async () => {
+    if (!isAdmin) return;
     await onDescriptionUpdate(transaction.id, editedDescription);
     setIsEditing(false);
   };
@@ -62,6 +67,7 @@ export default function TransactionTableRow({
 
   // Handle tag selection (now with auto-save)
   const handleTagChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!isAdmin) return;
     const tagId = e.target.value;
     if (tagId) {
       await onAddTag(transaction.id, tagId);
@@ -71,6 +77,8 @@ export default function TransactionTableRow({
 
   // Handle auto-assign owner
   const handleAutoAssignOwner = () => {
+    if (!isAdmin) return;
+
     // Close the menu after clicking
     if (menuRef.current) {
       menuRef.current.open = false;
@@ -91,6 +99,7 @@ export default function TransactionTableRow({
   // Update owner when auto-assign completes successfully
   useEffect(() => {
     if (
+      isAdmin &&
       autoAssignFetcher.data &&
       autoAssignFetcher.data.success &&
       autoAssignFetcher.data.owner_id !== null
@@ -98,7 +107,7 @@ export default function TransactionTableRow({
       // If successful and an owner was found, update the local state
       onOwnerChange(transaction.id, autoAssignFetcher.data.owner_id.toString());
     }
-  }, [autoAssignFetcher.data, transaction.id, onOwnerChange]);
+  }, [autoAssignFetcher.data, transaction.id, onOwnerChange, isAdmin]);
 
   return (
     <tr>
@@ -137,9 +146,11 @@ export default function TransactionTableRow({
           </div>
         ) : (
           <div
-            className="cursor-pointer hover:bg-base-200 rounded p-2"
-            onClick={startEditingDescription}
-            title="Click to edit"
+            className={
+              isAdmin ? "cursor-pointer hover:bg-base-200 rounded p-2" : "p-2"
+            }
+            onClick={isAdmin ? startEditingDescription : undefined}
+            title={isAdmin ? "Click to edit" : undefined}
           >
             {transaction.description ||
               transaction.bank_description ||
@@ -168,18 +179,31 @@ export default function TransactionTableRow({
         )}
       </td>
       <td>
-        <select
-          className="select select-sm select-bordered w-full max-w-xs"
-          value={transaction.owner_id || ""}
-          onChange={(e) => onOwnerChange(transaction.id, e.target.value)}
-        >
-          <option value="">No Owner</option>
-          {owners.map((owner) => (
-            <option key={owner.id} value={owner.id}>
-              {owner.name} ({owner.apartment_id})
-            </option>
-          ))}
-        </select>
+        {isAdmin ? (
+          <select
+            className="select select-sm select-bordered w-full max-w-xs"
+            value={transaction.owner_id || ""}
+            onChange={(e) => onOwnerChange(transaction.id, e.target.value)}
+            disabled={!isAdmin}
+          >
+            <option value="">No Owner</option>
+            {owners.map((owner) => (
+              <option key={owner.id} value={owner.id}>
+                {owner.name} ({owner.apartment_id})
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>
+            {transaction.owner_id
+              ? owners.find((o) => o.id === transaction.owner_id)?.name +
+                ` (${
+                  owners.find((o) => o.id === transaction.owner_id)
+                    ?.apartment_id
+                })`
+              : "No Owner"}
+          </span>
+        )}
       </td>
       <td>
         <div className="flex flex-wrap gap-1 mb-1">
@@ -187,68 +211,78 @@ export default function TransactionTableRow({
             transaction.tags.map((tag) => (
               <div
                 key={tag.id}
-                className="badge gap-1"
+                className="badge text-white gap-1"
                 style={{ backgroundColor: tag.color || "#888" }}
               >
                 {tag.name}
-                <button
-                  className="btn btn-xs btn-circle btn-ghost"
-                  onClick={() => onRemoveTag(transaction.id, tag.id)}
-                >
-                  ×
-                </button>
+                {isAdmin && (
+                  <button
+                    className="btn btn-xs btn-circle btn-ghost"
+                    onClick={() => onRemoveTag(transaction.id, tag.id)}
+                    disabled={!isAdmin}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
         </div>
-        <div className="flex">
-          <select
-            className="select select-xs select-bordered w-full"
-            defaultValue=""
-            onChange={handleTagChange}
-          >
-            <option value="">Add tag...</option>
-            {tags.map((tag) => (
-              <option key={tag.id} value={tag.id}>
-                {tag.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </td>
-      <td>
-        <details ref={menuRef} className="dropdown dropdown-end">
-          <summary className="btn btn-sm btn-circle">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-5 h-5"
+        {isAdmin && (
+          <div className="flex">
+            <select
+              className="select select-xs select-bordered w-full"
+              defaultValue=""
+              onChange={handleTagChange}
+              disabled={!isAdmin}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
-              />
-            </svg>
-          </summary>
-          <ul className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-10">
-            <li>
-              <Link to={`/transactions/${transaction.id}`}>View Details</Link>
-            </li>
-            <li>
-              <button
-                onClick={handleAutoAssignOwner}
-                className={autoAssignFetcher.state !== "idle" ? "loading" : ""}
-                disabled={autoAssignFetcher.state !== "idle"}
-              >
-                Auto-assign Owner
-              </button>
-            </li>
-          </ul>
-        </details>
+              <option value="">Add tag...</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </td>
+      {isAdmin && (
+        <td>
+          <details ref={menuRef} className="dropdown dropdown-end">
+            <summary className="btn btn-sm btn-circle">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
+                />
+              </svg>
+            </summary>
+            <ul className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-10">
+              <li>
+                <Link to={`/transactions/${transaction.id}`}>View Details</Link>
+              </li>
+              <li>
+                <button
+                  onClick={handleAutoAssignOwner}
+                  className={
+                    autoAssignFetcher.state !== "idle" ? "loading" : ""
+                  }
+                  disabled={autoAssignFetcher.state !== "idle" || !isAdmin}
+                >
+                  Auto-assign Owner
+                </button>
+              </li>
+            </ul>
+          </details>
+        </td>
+      )}
     </tr>
   );
 }

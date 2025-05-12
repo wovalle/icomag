@@ -348,6 +348,34 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                 />
               </div>
 
+              <div className="form-control mt-4">
+                <label className="label cursor-pointer">
+                  <span className="label-text">
+                    Apply to existing transactions
+                  </span>
+                  <input
+                    type="checkbox"
+                    name="applyToExisting"
+                    className="checkbox"
+                    defaultChecked={true}
+                  />
+                </label>
+              </div>
+
+              <div className="form-control">
+                <label className="label cursor-pointer">
+                  <span className="label-text">
+                    Only apply to transactions with no owner
+                  </span>
+                  <input
+                    type="checkbox"
+                    name="onlyNullOwners"
+                    className="checkbox"
+                    defaultChecked={true}
+                  />
+                </label>
+              </div>
+
               <div className="modal-action">
                 <button type="submit" className="btn btn-primary">
                   Save

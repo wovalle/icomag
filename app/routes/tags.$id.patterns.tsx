@@ -1,15 +1,18 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { redirect } from "react-router";
-import { ownerPatterns, transactions } from "../../database/schema";
-
-import type { Route } from "./+types/owners.$id";
+import { tagPatterns, transactionToTags } from "../../database/schema";
+import type { Route } from "./+types/tags.$id";
 
 export async function action({ request, params, context }: Route.ActionArgs) {
-  const ownerId = parseInt(params.id);
+  await context.assertAdminUser({ context, request });
 
-  // Make sure we have a valid owner ID
-  if (isNaN(ownerId)) {
-    return { success: false, error: "Invalid owner ID" };
+  console.log("Action triggered for tag patterns", params.id);
+
+  const tagId = parseInt(params.id);
+
+  // Make sure we have a valid tag ID
+  if (isNaN(tagId)) {
+    return { success: false, error: "Invalid tag ID" };
   }
 
   // Get the form data
@@ -22,7 +25,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const pattern = formData.get("pattern")?.toString();
       const description = formData.get("description")?.toString() || null;
       const applyToExisting = formData.get("applyToExisting") === "on";
-      const onlyNullOwners = formData.get("onlyNullOwners") === "on";
 
       if (!pattern) {
         return { success: false, error: "Pattern is required" };
@@ -36,8 +38,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           return { success: false, error: "Invalid regex pattern" };
         }
 
-        await context.db.insert(ownerPatterns).values({
-          owner_id: ownerId,
+        await context.db.insert(tagPatterns).values({
+          tag_id: tagId,
           pattern,
           description,
           is_active: 1,
@@ -45,12 +47,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           updated_at: Math.floor(Date.now() / 1000),
         });
 
-        // If applyToExisting is true, assign the owner to matching transactions
+        // If applyToExisting is true, assign the tag to matching transactions
         if (applyToExisting) {
           // Get all transactions
-          const allTransactions = await context.db.query.transactions.findMany({
-            where: onlyNullOwners ? isNull(transactions.owner_id) : undefined,
-          });
+          const allTransactions =
+            await context.db.query.transactions.findMany();
 
           // Create a RegExp object for the pattern
           const regex = new RegExp(pattern);
@@ -62,19 +63,29 @@ export async function action({ request, params, context }: Route.ActionArgs) {
             return regex.test(description);
           });
 
-          // Update transactions to set this owner
+          // For each matching transaction, add this tag
           for (const transaction of matchingTransactions) {
-            await context.db
-              .update(transactions)
-              .set({
-                owner_id: ownerId,
-                updated_at: Math.floor(Date.now() / 1000),
-              })
-              .where(eq(transactions.id, transaction.id));
+            // Check if the tag is already associated with this transaction
+            const existingLink =
+              await context.db.query.transactionToTags.findFirst({
+                where: and(
+                  eq(transactionToTags.transaction_id, transaction.id),
+                  eq(transactionToTags.tag_id, tagId)
+                ),
+              });
+
+            if (!existingLink) {
+              // Add the tag to the transaction
+              await context.db.insert(transactionToTags).values({
+                transaction_id: transaction.id,
+                tag_id: tagId,
+                created_at: Math.floor(Date.now() / 1000),
+              });
+            }
           }
         }
 
-        return redirect(`/owners/${ownerId}`);
+        return redirect(`/tags/${tagId}`);
       } catch (error) {
         console.error("Error adding recognition pattern:", error);
         return { success: false, error: "Failed to add recognition pattern" };
@@ -85,10 +96,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const patternId = parseInt(formData.get("patternId")?.toString() || "0");
 
       try {
-        const pattern = await context.db.query.ownerPatterns.findFirst({
+        const pattern = await context.db.query.tagPatterns.findFirst({
           where: and(
-            eq(ownerPatterns.id, patternId),
-            eq(ownerPatterns.owner_id, ownerId)
+            eq(tagPatterns.id, patternId),
+            eq(tagPatterns.tag_id, tagId)
           ),
         });
 
@@ -97,14 +108,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         }
 
         await context.db
-          .update(ownerPatterns)
+          .update(tagPatterns)
           .set({
             is_active: pattern.is_active ? 0 : 1,
             updated_at: Math.floor(Date.now() / 1000),
           })
-          .where(eq(ownerPatterns.id, patternId));
+          .where(eq(tagPatterns.id, patternId));
 
-        return redirect(`/owners/${ownerId}`);
+        return redirect(`/tags/${tagId}`);
       } catch (error) {
         console.error("Error toggling pattern status:", error);
         return { success: false, error: "Failed to update pattern status" };
@@ -116,15 +127,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
       try {
         await context.db
-          .delete(ownerPatterns)
+          .delete(tagPatterns)
           .where(
-            and(
-              eq(ownerPatterns.id, patternId),
-              eq(ownerPatterns.owner_id, ownerId)
-            )
+            and(eq(tagPatterns.id, patternId), eq(tagPatterns.tag_id, tagId))
           );
 
-        return redirect(`/owners/${ownerId}`);
+        return redirect(`/tags/${tagId}`);
       } catch (error) {
         console.error("Error deleting pattern:", error);
         return { success: false, error: "Failed to delete pattern" };

@@ -57,6 +57,13 @@
       "when": 1746888530369,
       "tag": "0007_deep_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1747068246630,
+      "tag": "0008_conscious_lockheed",
+      "breakpoints": true
     }
   ]
 }

@@ -110,6 +110,23 @@ export const transactionTags = sqliteTable(
   }
 );
 
+// Tag recognition patterns table to identify transactions
+export const tagPatterns = sqliteTable("tag_patterns", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  tag_id: integer()
+    .references(() => transactionTags.id, { onDelete: "cascade" })
+    .notNull(),
+  pattern: text().notNull(), // Regex pattern string
+  description: text(), // Description of what this pattern matches
+  is_active: integer().default(1), // 1 for active, 0 for inactive
+  created_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+  updated_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
 // Transaction to Tags many-to-many relationship table
 export const transactionToTags = sqliteTable("transaction_to_tags", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -173,6 +190,7 @@ export const transactionTagsRelations = relations(
       references: [transactionTags.id],
       relationName: "parentChildTags",
     }),
+    recognitionPatterns: many(tagPatterns),
   })
 );
 
@@ -190,3 +208,11 @@ export const transactionToTagsRelations = relations(
     }),
   })
 );
+
+// Define relations for tag patterns
+export const tagPatternsRelations = relations(tagPatterns, ({ one }) => ({
+  tag: one(transactionTags, {
+    fields: [tagPatterns.tag_id],
+    references: [transactionTags.id],
+  }),
+}));

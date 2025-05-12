@@ -1,25 +1,32 @@
 import { useState } from "react";
-import { Form, Link, useLoaderData } from "react-router";
+import { Form, Link, redirect, useLoaderData } from "react-router";
 
 import { owners } from "../../database/schema";
 import type { Route } from "./+types/owners";
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context, request }: Route.LoaderArgs) {
+  await context.assertLoggedInUser({ context, request });
+
+  // Get the current user to check if they're an admin
+  const user = await context.getCurrentUser({ request, context });
+  const isAdmin = user?.isAdmin || false;
+
   try {
     const ownersList = await context.db.query.owners.findMany({
       orderBy: (owners, { desc }) => [desc(owners.created_at)],
     });
 
-    return { owners: ownersList, error: null };
+    return { owners: ownersList, error: null, isAdmin };
   } catch (error) {
     console.error("Error loading owners:", error);
-    return { owners: [], error: "Failed to load owners" };
+    return { owners: [], error: "Failed to load owners", isAdmin };
   }
 }
 
 export default function OwnersIndex() {
-  const { owners, error } = useLoaderData<typeof loader>();
+  const { owners, error, isAdmin } = useLoaderData<typeof loader>();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   return (
     <div className="p-6">
@@ -30,16 +37,18 @@ export default function OwnersIndex() {
             Manage apartment owners and their bank accounts
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="btn btn-primary"
-        >
-          Add Owner
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="btn btn-primary"
+          >
+            Add Owner
+          </button>
+        )}
       </div>
-      {error && (
+      {(error || actionError) && (
         <div role="alert" className="alert alert-error mb-4">
-          <span>{error}</span>
+          <span>{error || actionError}</span>
         </div>
       )}
       <div className="overflow-x-auto">
@@ -86,12 +95,14 @@ export default function OwnersIndex() {
                       >
                         View
                       </Link>
-                      <Link
-                        to={`/owners/${owner.id}/edit`}
-                        className="btn btn-sm join-item"
-                      >
-                        Edit
-                      </Link>
+                      {isAdmin && (
+                        <Link
+                          to={`/owners/${owner.id}/edit`}
+                          className="btn btn-sm join-item"
+                        >
+                          Edit
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -101,7 +112,7 @@ export default function OwnersIndex() {
         </table>
       </div>
       {/* Add Owner Modal */}
-      {isModalOpen && (
+      {isAdmin && isModalOpen && (
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Add New Owner</h3>
@@ -180,6 +191,14 @@ export default function OwnersIndex() {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  await context.assertLoggedInUser({ context, request });
+
+  // Check if the user is an admin
+  const user = await context.getCurrentUser({ request, context });
+  if (!user?.isAdmin) {
+    return redirect("/unauthorized");
+  }
+
   const formData = await request.formData();
   const name = formData.get("name");
   const apartment_id = formData.get("apartment_id");

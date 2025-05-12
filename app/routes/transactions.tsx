@@ -1,12 +1,27 @@
 import { useState } from "react";
-import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import {
+  Link,
+  redirect,
+  useFetcher,
+  useLoaderData,
+  useSearchParams,
+} from "react-router";
 import AddTransactionModal from "../components/AddTransactionModal";
 import TransactionFilters from "../components/TransactionFilters";
 import TransactionTable from "../components/TransactionTable";
 import { TransactionService, formatters } from "../services/transactionService";
 import type { Route } from "./+types/transactions";
 
-export async function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
+  await context.assertLoggedInUser({ context, request });
+
+  // Check if the user is authenticated using Clerk's getAuth
+  const user = await context.getCurrentUser({ request, context });
+
+  if (!user) {
+    return redirect("/unauthorized");
+  }
+
   try {
     const transactionService = new TransactionService(context.db);
 
@@ -50,6 +65,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         startDate,
         endDate,
       },
+      isAdmin: user.isAdmin,
       error:
         transactionsResult.error ||
         ownersResult.error ||
@@ -68,13 +84,34 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         currentPage: 1,
         limit: 20,
       },
-      filters: {},
+      filters: {
+        ownerId: null,
+        transactionType: null,
+        tagId: null,
+        search: null,
+        startDate: null,
+        endDate: null,
+      },
+      isAdmin: false,
       error: "Failed to load transactions",
     };
   }
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  await context.assertLoggedInUser({ context, request });
+  // Check if the user is an admin using Clerk's getAuth
+  const user = await context.getCurrentUser({ context, request });
+
+  if (!user) {
+    return redirect("/unauthorized");
+  }
+
+  // Check if the user is an admin
+  if (!user.isAdmin) {
+    return redirect("/unauthorized");
+  }
+
   const transactionService = new TransactionService(context.db);
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -153,7 +190,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function TransactionsPage() {
-  const { transactions, owners, tags, pagination, filters, error } =
+  const { transactions, owners, tags, pagination, filters, isAdmin, error } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -199,6 +236,11 @@ export default function TransactionsPage() {
     transactionId: number,
     description: string
   ) => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to update transactions");
+      return;
+    }
+
     setActionError(null);
     const formData = new FormData();
     formData.append("intent", "updateDescription");
@@ -214,6 +256,11 @@ export default function TransactionsPage() {
 
   // Handle owner assignment
   const handleOwnerChange = async (transactionId: number, ownerId: string) => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to assign owners");
+      return;
+    }
+
     setActionError(null);
     const formData = new FormData();
     formData.append("intent", "assignOwner");
@@ -229,6 +276,11 @@ export default function TransactionsPage() {
 
   // Handle tag operations
   const handleAddTag = async (transactionId: number, tagId: string) => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to add tags");
+      return;
+    }
+
     setActionError(null);
     const formData = new FormData();
     formData.append("intent", "addTag");
@@ -243,6 +295,11 @@ export default function TransactionsPage() {
   };
 
   const handleRemoveTag = async (transactionId: number, tagId: number) => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to remove tags");
+      return;
+    }
+
     setActionError(null);
     const formData = new FormData();
     formData.append("intent", "removeTag");
@@ -265,17 +322,19 @@ export default function TransactionsPage() {
             Manage financial transactions and link them to owners
           </p>
         </div>
-        <div className="join">
-          <Link to="/batches/import" className="btn btn-secondary join-item">
-            Import Transactions
-          </Link>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn btn-primary join-item"
-          >
-            Add Transaction
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="join">
+            <Link to="/batches/import" className="btn btn-secondary join-item">
+              Import Transactions
+            </Link>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="btn btn-primary join-item"
+            >
+              Add Transaction
+            </button>
+          </div>
+        )}
       </div>
 
       {(error || actionError) && (
@@ -305,15 +364,18 @@ export default function TransactionsPage() {
         onOwnerChange={handleOwnerChange}
         onAddTag={handleAddTag}
         onRemoveTag={handleRemoveTag}
+        isAdmin={isAdmin}
       />
 
       {/* Add Transaction Modal */}
-      <AddTransactionModal
-        isOpen={isModalOpen}
-        owners={owners}
-        tags={tags}
-        onClose={() => setIsModalOpen(false)}
-      />
+      {isAdmin && (
+        <AddTransactionModal
+          isOpen={isModalOpen}
+          owners={owners}
+          tags={tags}
+          onClose={() => setIsModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

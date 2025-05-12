@@ -2,9 +2,13 @@ import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
   index("./routes/_index.tsx"),
-  route("/batches", "./routes/batches.tsx"),
+  route("/sign-in/*", "./routes/sign-in.tsx"),
+  route("/sign-up/*", "./routes/sign-up.tsx"),
+  route("/unauthorized", "./routes/unauthorized.tsx"),
   route("/tags", "./routes/tags.tsx"),
   route("/tags/:id", "./routes/tags.$id.tsx"),
+  route("/tags/:id/patterns", "./routes/tags.$id.patterns.tsx"),
+  route("/batches", "./routes/batches.tsx"),
   route("/batches/import", "./routes/batches.import.tsx"),
   route("/batches/:id", "./routes/batches.$id.tsx"),
   route("/owners", "./routes/owners.tsx"),

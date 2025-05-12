@@ -5,12 +5,12 @@ interface TransactionFiltersProps {
   owners: Owner[];
   tags: Tag[];
   initialFilters: {
-    transactionType?: string;
-    ownerId?: string;
-    tagId?: string;
-    search?: string;
-    startDate?: string;
-    endDate?: string;
+    ownerId: string | null;
+    transactionType: string | null;
+    tagId: string | null;
+    search: string | null;
+    startDate: string | null;
+    endDate: string | null;
   };
   onApplyFilters: (filters: {
     type: string;

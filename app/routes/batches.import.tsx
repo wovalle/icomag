@@ -7,6 +7,7 @@ import {
   transactionToTags,
   transactions,
 } from "../../database/schema";
+import { requireAdmin } from "../components/ProtectedRoute";
 import { parsePopularTransactionsFile } from "../services/bankFileParser";
 import type { Route } from "./+types/batches.import";
 
@@ -14,11 +15,19 @@ type ImportLoaderData = {
   error: string | null;
 };
 
-export async function loader() {
+export async function loader({ context }: Route.LoaderArgs) {
+  // Check if the user is an admin
+  const adminResult = await requireAdmin({ context });
+  if (adminResult) return adminResult;
+
   return { error: null };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  // Check if the user is an admin
+  const adminResult = await requireAdmin({ context });
+  if (adminResult) return adminResult;
+
   const formData = await request.formData();
   const file = formData.get("csvFile");
   const usePatternMatching = formData.get("usePatternMatching") === "on";

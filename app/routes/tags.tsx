@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { Form, useFetcher, useLoaderData } from "react-router";
+import { Form, Link, redirect, useFetcher, useLoaderData } from "react-router";
 
 import { transactionTags } from "../../database/schema";
 import type { Route } from "./+types/tags";
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context, request }: Route.LoaderArgs) {
+  await context.assertLoggedInUser({ context, request });
+
+  // Get the current user to check if they're an admin
+  const user = await context.getCurrentUser({ request, context });
+  const isAdmin = user?.isAdmin || false;
+
   try {
     const tagsList = await context.db.query.transactionTags.findMany({
       orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
@@ -13,25 +19,27 @@ export async function loader({ context }: Route.LoaderArgs) {
       },
     });
 
-    return { tags: tagsList, error: null };
+    return { tags: tagsList, error: null, isAdmin };
   } catch (error) {
     console.error("Error loading tags:", error);
-    return { tags: [], error: "Failed to load tags" };
+    return { tags: [], error: "Failed to load tags", isAdmin };
   }
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  await context.assertLoggedInUser({ context, request });
+
+  // Check if the user is an admin
+  const user = await context.getCurrentUser({ request, context });
+  if (!user?.isAdmin) {
+    return redirect("/unauthorized");
+  }
+
   const formData = await request.formData();
   const name = formData.get("name");
   const description = formData.get("description") || null;
   const color = formData.get("colorHex");
-  const method = formData.get("_method");
   const parentId = formData.get("parent_id") || null;
-
-  if (method === "patch") {
-    // This is handled by the route for editing a specific tag
-    return null;
-  }
 
   try {
     await context.db.insert(transactionTags).values({
@@ -51,18 +59,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function TagsIndex() {
-  const { tags, error } = useLoaderData<typeof loader>();
+  const { tags, error, isAdmin } = useLoaderData<typeof loader>();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTag, setEditingTag] = useState(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const fetcher = useFetcher();
 
-  const openEditModal = (tag) => {
-    setEditingTag(tag);
-    setIsModalOpen(true);
-  };
-
   const openCreateModal = () => {
-    setEditingTag(null);
+    if (!isAdmin) {
+      setActionError("Admin privileges required to create tags");
+      return;
+    }
     setIsModalOpen(true);
   };
 
@@ -75,14 +81,16 @@ export default function TagsIndex() {
             Manage tags to categorize transactions
           </p>
         </div>
-        <button onClick={openCreateModal} className="btn btn-primary">
-          Add Tag
-        </button>
+        {isAdmin && (
+          <button onClick={openCreateModal} className="btn btn-primary">
+            Add Tag
+          </button>
+        )}
       </div>
 
-      {error && (
+      {(error || actionError) && (
         <div role="alert" className="alert alert-error mb-4">
-          <span>{error}</span>
+          <span>{error || actionError}</span>
         </div>
       )}
 
@@ -111,17 +119,9 @@ export default function TagsIndex() {
                   </p>
                 )}
                 <div className="card-actions justify-end mt-2">
-                  <button
-                    onClick={() => openEditModal(tag)}
-                    className="btn btn-sm"
-                  >
-                    Edit
-                  </button>
-                  <fetcher.Form method="delete" action={`/tags/${tag.id}`}>
-                    <button type="submit" className="btn btn-sm btn-error">
-                      Delete
-                    </button>
-                  </fetcher.Form>
+                  <Link to={`/tags/${tag.id}`} className="btn btn-sm">
+                    View
+                  </Link>
                 </div>
               </div>
             </div>
@@ -129,21 +129,12 @@ export default function TagsIndex() {
         )}
       </div>
 
-      {/* Add/Edit Tag Modal */}
-      {isModalOpen && (
+      {/* Add Tag Modal */}
+      {isAdmin && isModalOpen && (
         <dialog open className="modal">
           <div className="modal-box">
-            <h3 className="font-bold text-lg">
-              {editingTag ? "Edit Tag" : "Add New Tag"}
-            </h3>
-            <Form
-              method="post"
-              action={editingTag ? `/tags/${editingTag.id}` : undefined}
-            >
-              {editingTag && (
-                <input type="hidden" name="_method" value="patch" />
-              )}
-
+            <h3 className="font-bold text-lg">Add New Tag</h3>
+            <Form method="post">
               <div className="form-control">
                 <label className="label">
                   <span className="label-text">Name</span>
@@ -153,7 +144,6 @@ export default function TagsIndex() {
                   name="name"
                   placeholder="Tag name"
                   className="input input-bordered"
-                  defaultValue={editingTag?.name || ""}
                   required
                 />
               </div>
@@ -167,7 +157,6 @@ export default function TagsIndex() {
                   name="description"
                   placeholder="Tag description"
                   className="input input-bordered"
-                  defaultValue={editingTag?.description || ""}
                 />
               </div>
 
@@ -178,16 +167,14 @@ export default function TagsIndex() {
                 <select
                   name="parent_id"
                   className="select select-bordered"
-                  defaultValue={editingTag?.parent_id || ""}
+                  defaultValue=""
                 >
                   <option value="">No parent</option>
-                  {tags
-                    .filter((tag) => !editingTag || tag.id !== editingTag.id)
-                    .map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
                 </select>
                 <span className="text-xs mt-1">
                   Use this to create hierarchical tag relationships
@@ -203,14 +190,14 @@ export default function TagsIndex() {
                     type="color"
                     name="color"
                     className="w-12 h-12 rounded"
-                    defaultValue={editingTag?.color || "#3b82f6"}
+                    defaultValue="#3b82f6"
                   />
                   <input
                     type="text"
                     name="colorHex"
                     placeholder="#RRGGBB"
                     className="input input-bordered flex-grow"
-                    defaultValue={editingTag?.color || "#3b82f6"}
+                    defaultValue="#3b82f6"
                   />
                 </div>
               </div>

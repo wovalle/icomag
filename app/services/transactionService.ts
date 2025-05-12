@@ -3,6 +3,7 @@ import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 import {
   owners,
+  tagPatterns,
   transactionTags,
   transactionToTags,
   transactions,
@@ -78,6 +79,84 @@ export class TransactionService {
     } catch (error) {
       console.error("Error auto-assigning owner to transaction:", error);
       return { success: false, error: "Failed to auto-assign owner" };
+    }
+  }
+
+  /**
+   * Automatically assigns tags to a transaction based on tag patterns
+   */
+  async autoAssignTags(
+    transactionId: number
+  ): Promise<{ success: boolean; tagIds?: number[]; error?: string }> {
+    try {
+      // First get the transaction to access its description
+      const transaction = await this.db.query.transactions.findFirst({
+        where: eq(transactions.id, transactionId),
+      });
+
+      if (!transaction) {
+        return { success: false, error: "Transaction not found" };
+      }
+
+      if (!transaction.description && !transaction.bank_description) {
+        return {
+          success: false,
+          error: "Transaction has no description to match",
+        };
+      }
+
+      // Use the description or bank_description as the text to match patterns against
+      const descriptionText =
+        transaction.description || transaction.bank_description;
+
+      // Get all active tag patterns
+      const allTagPatterns = await this.db.query.tagPatterns.findMany({
+        where: eq(tagPatterns.is_active, 1),
+      });
+
+      // Find all matching patterns
+      const matchingPatterns = allTagPatterns.filter(
+        (pattern) =>
+          descriptionText && new RegExp(pattern.pattern).test(descriptionText)
+      );
+
+      if (matchingPatterns.length === 0) {
+        return { success: true, tagIds: [] };
+      }
+
+      // Get unique tag IDs from matching patterns
+      const tagIds = [
+        ...new Set(matchingPatterns.map((pattern) => pattern.tag_id)),
+      ];
+
+      // For each tag ID, check if it's already assigned to the transaction
+      for (const tagId of tagIds) {
+        // Check if the tag is already assigned to the transaction
+        const existingTag = await this.db
+          .select()
+          .from(transactionToTags)
+          .where(
+            and(
+              eq(transactionToTags.transaction_id, transactionId),
+              eq(transactionToTags.tag_id, tagId)
+            )
+          )
+          .limit(1);
+
+        // If tag is not already assigned, add it
+        if (existingTag.length === 0) {
+          await this.db.insert(transactionToTags).values({
+            transaction_id: transactionId,
+            tag_id: tagId,
+            created_at: Math.floor(Date.now() / 1000),
+          });
+        }
+      }
+
+      return { success: true, tagIds };
+    } catch (error) {
+      console.error("Error auto-assigning tags to transaction:", error);
+      return { success: false, error: "Failed to auto-assign tags" };
     }
   }
 

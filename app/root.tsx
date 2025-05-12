@@ -1,3 +1,5 @@
+import { ClerkProvider } from "@clerk/react-router";
+import { rootAuthLoader } from "@clerk/react-router/ssr.server";
 import {
   Links,
   Meta,
@@ -10,6 +12,10 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 import { Menu } from "./components/Menu";
+
+export async function loader(args: Route.LoaderArgs) {
+  return rootAuthLoader(args);
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -42,14 +48,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+export default function App({ loaderData }: Route.ComponentProps) {
   return (
-    <div className="min-h-screen">
-      <Menu />
-      <main className="container mx-auto px-4">
-        <Outlet />
-      </main>
-    </div>
+    <ClerkProvider
+      loaderData={loaderData}
+      signUpFallbackRedirectUrl="/"
+      signInFallbackRedirectUrl="/"
+    >
+      <div className="min-h-screen">
+        <Menu />
+        <main className="container mx-auto px-4">
+          <Outlet />
+        </main>
+      </div>
+    </ClerkProvider>
   );
 }
 

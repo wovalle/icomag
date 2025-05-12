@@ -1,9 +1,14 @@
+import { SignedIn, SignedOut, UserButton } from "@clerk/react-router";
 import { Link, useLocation } from "react-router";
 
 export function Menu() {
   const location = useLocation();
 
   const isActive = (path: string) => {
+    if (path === "/") {
+      return location.pathname === path ? "btn-active" : "";
+    }
+
     return location.pathname.startsWith(path) ? "btn-active" : "";
   };
 
@@ -36,7 +41,6 @@ export function Menu() {
                 Home
               </Link>
             </li>
-
             <li>
               <Link to="/owners" className={isActive("/owners")}>
                 Owners
@@ -100,6 +104,16 @@ export function Menu() {
             </Link>
           </li>
         </ul>
+      </div>
+      <div className="navbar-end">
+        <SignedOut>
+          <Link to="/sign-in" className="btn btn-primary">
+            Sign In
+          </Link>
+        </SignedOut>
+        <SignedIn>
+          <UserButton afterSignOutUrl="/" />
+        </SignedIn>
       </div>
     </div>
   );

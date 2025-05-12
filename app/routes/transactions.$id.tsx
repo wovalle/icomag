@@ -12,11 +12,20 @@ import {
   transactionToTags,
   transactions,
 } from "../../database/schema";
+import {
+  requireAdmin,
+  requireAuthentication,
+} from "../components/ProtectedRoute";
 import { formatters } from "../services/transactionService";
 
 import type { Route } from "./+types/transactions.$id";
 
 export async function loader({ context, params }: Route.LoaderArgs) {
+  // Check if the user is authenticated
+  const authResult = await requireAuthentication({ context });
+  console.log("authResult", authResult);
+  if (authResult) return authResult;
+
   const id = parseInt(params.id || "0");
 
   if (!id) {
@@ -24,11 +33,16 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       transaction: null,
       owners: [],
       allTags: [],
+      isAdmin: false,
       error: "Invalid transaction ID",
     };
   }
 
   try {
+    // Get current user info
+    const userInfo = context.getCurrentUser();
+    const isAdmin = userInfo.isAdmin;
+
     // Fetch transaction with owner
     const transaction = await context.db.query.transactions.findFirst({
       where: eq(transactions.id, id),
@@ -42,6 +56,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
         transaction: null,
         owners: [],
         allTags: [],
+        isAdmin,
         error: "Transaction not found",
       };
     }
@@ -77,6 +92,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       },
       owners: ownersList,
       allTags: allTagsList,
+      isAdmin,
       error: null,
     };
   } catch (error) {
@@ -85,12 +101,17 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       transaction: null,
       owners: [],
       allTags: [],
+      isAdmin: false,
       error: "Failed to load transaction details",
     };
   }
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
+  // Check if the user is an admin
+  const adminResult = await requireAdmin({ context });
+  if (adminResult) return adminResult;
+
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = parseInt(params.id || "0");
@@ -196,6 +217,7 @@ export default function TransactionDetail() {
     transaction,
     owners,
     allTags,
+    isAdmin,
     error: loaderError,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
@@ -213,6 +235,13 @@ export default function TransactionDetail() {
 
   const handleUpdateDescription = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      setActionError(
+        "Admin privileges required to update transaction description"
+      );
+      return;
+    }
+
     const formData = new FormData();
     formData.append("intent", "updateDescription");
     formData.append("description", editedDescription);
@@ -222,6 +251,11 @@ export default function TransactionDetail() {
   };
 
   const handleOwnerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to assign owners");
+      return;
+    }
+
     const ownerId = e.target.value;
     const formData = new FormData();
     formData.append("intent", "assignOwner");
@@ -231,6 +265,11 @@ export default function TransactionDetail() {
   };
 
   const handleAddTag = () => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to add tags");
+      return;
+    }
+
     if (!selectedTagId) return;
 
     const formData = new FormData();
@@ -242,6 +281,11 @@ export default function TransactionDetail() {
   };
 
   const handleRemoveTag = (tagId: number) => {
+    if (!isAdmin) {
+      setActionError("Admin privileges required to remove tags");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("intent", "removeTag");
     formData.append("tag_id", tagId.toString());
@@ -445,12 +489,14 @@ export default function TransactionDetail() {
             ) : (
               <div>
                 <p className="mb-4">{transaction.description}</p>
-                <button
-                  className="btn btn-sm btn-outline"
-                  onClick={() => setIsEditing(true)}
-                >
-                  Edit Description
-                </button>
+                {isAdmin && (
+                  <button
+                    className="btn btn-sm btn-outline"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    Edit Description
+                  </button>
+                )}
               </div>
             )}
 
@@ -470,22 +516,34 @@ export default function TransactionDetail() {
             <h2 className="card-title">Owner</h2>
             <div className="divider"></div>
 
-            <Form method="post">
-              <input type="hidden" name="intent" value="assignOwner" />
-              <select
-                name="owner_id"
-                className="select select-bordered w-full"
-                value={transaction.owner_id?.toString() || "null"}
-                onChange={handleOwnerChange}
-              >
-                <option value="null">Not assigned</option>
-                {owners.map((owner) => (
-                  <option key={owner.id} value={owner.id.toString()}>
+            {isAdmin ? (
+              <Form method="post">
+                <input type="hidden" name="intent" value="assignOwner" />
+                <select
+                  name="owner_id"
+                  className="select select-bordered w-full"
+                  value={transaction.owner_id?.toString() || "null"}
+                  onChange={handleOwnerChange}
+                >
+                  <option value="null">Not assigned</option>
+                  {owners.map((owner) => (
+                    <option key={owner.id} value={owner.id.toString()}>
+                      {owner.name} ({owner.apartment_id})
+                    </option>
+                  ))}
+                </select>
+              </Form>
+            ) : (
+              <div className="mb-4">
+                {owner ? (
+                  <p>
                     {owner.name} ({owner.apartment_id})
-                  </option>
-                ))}
-              </select>
-            </Form>
+                  </p>
+                ) : (
+                  <p className="text-sm opacity-70">No owner assigned</p>
+                )}
+              </div>
+            )}
 
             {owner && (
               <div className="mt-4">
@@ -519,44 +577,48 @@ export default function TransactionDetail() {
                     }}
                   >
                     {tag.name}
-                    <button
-                      onClick={() => handleRemoveTag(tag.id)}
-                      className="badge badge-sm"
-                    >
-                      ✕
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleRemoveTag(tag.id)}
+                        className="badge badge-sm"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 ))
               )}
             </div>
 
-            <div className="join">
-              <select
-                className="select select-bordered join-item w-full"
-                value={selectedTagId}
-                onChange={(e) => setSelectedTagId(e.target.value)}
-              >
-                <option value="" disabled>
-                  Add a tag
-                </option>
-                {allTags
-                  .filter(
-                    (tag) => !transaction.tags.some((t) => t.id === tag.id)
-                  )
-                  .map((tag) => (
-                    <option key={tag.id} value={tag.id.toString()}>
-                      {tag.name}
-                    </option>
-                  ))}
-              </select>
-              <button
-                className="btn join-item"
-                onClick={handleAddTag}
-                disabled={!selectedTagId}
-              >
-                Add
-              </button>
-            </div>
+            {isAdmin && (
+              <div className="join">
+                <select
+                  className="select select-bordered join-item w-full"
+                  value={selectedTagId}
+                  onChange={(e) => setSelectedTagId(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Add a tag
+                  </option>
+                  {allTags
+                    .filter(
+                      (tag) => !transaction.tags.some((t) => t.id === tag.id)
+                    )
+                    .map((tag) => (
+                      <option key={tag.id} value={tag.id.toString()}>
+                        {tag.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  className="btn join-item"
+                  onClick={handleAddTag}
+                  disabled={!selectedTagId}
+                >
+                  Add
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

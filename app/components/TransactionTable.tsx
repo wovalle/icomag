@@ -24,6 +24,7 @@ interface TransactionTableProps {
   onOwnerChange: (transactionId: number, ownerId: string) => Promise<void>;
   onAddTag: (transactionId: number, tagId: string) => Promise<void>;
   onRemoveTag: (transactionId: number, tagId: number) => Promise<void>;
+  isAdmin?: boolean;
 }
 
 export default function TransactionTable({
@@ -37,6 +38,7 @@ export default function TransactionTable({
   onOwnerChange,
   onAddTag,
   onRemoveTag,
+  isAdmin = false,
 }: TransactionTableProps) {
   const { formatCurrency, formatDate } = formatters;
 
@@ -52,13 +54,13 @@ export default function TransactionTable({
               <th>Type</th>
               <th>Owner</th>
               <th>Tags</th>
-              <th>Actions</th>
+              {isAdmin && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {transactions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-4">
+                <td colSpan={isAdmin ? 7 : 6} className="text-center py-4">
                   No transactions found. Add your first transaction or adjust
                   your filters.
                 </td>
@@ -76,6 +78,7 @@ export default function TransactionTable({
                   onOwnerChange={onOwnerChange}
                   onAddTag={onAddTag}
                   onRemoveTag={onRemoveTag}
+                  isAdmin={isAdmin}
                 />
               ))
             )}

@@ -3,13 +3,13 @@
   "name": "icomag",
   "compatibility_date": "2025-04-04",
   "main": "./workers/app.ts",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
     "logs": {
       "enabled": true
     }
   },
-
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
   },
@@ -19,6 +19,12 @@
       "database_name": "icomag",
       "database_id": "9ceabb1d-70c0-4dfc-9031-45bde427eab7",
       "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "bucket_name": "icona",
+      "binding": "R2"
     }
   ]
 }

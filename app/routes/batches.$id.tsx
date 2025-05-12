@@ -10,7 +10,9 @@ type BatchDetailLoaderData = {
   error: string | null;
 };
 
-export async function loader({ context, params }: Route.LoaderArgs) {
+export async function loader({ context, params, request }: Route.LoaderArgs) {
+  await context.assertLoggedInUser({ context, request, params });
+
   if (!params.id) {
     return {
       batch: null,

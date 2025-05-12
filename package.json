@@ -16,6 +16,7 @@
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@clerk/react-router": "^1.4.2",
     "@react-router/fs-routes": "^7.5.3",
     "daisyui": "^5.0.35",
     "drizzle-orm": "~0.36.3",
@@ -32,6 +33,7 @@
     "@types/node": "^20",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "better-sqlite3": "^11.10.0",
     "dotenv-cli": "^7.4.3",
     "drizzle-kit": "~0.28.1",
     "tailwindcss": "^4.1.4",
