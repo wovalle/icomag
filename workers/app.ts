@@ -3,6 +3,8 @@ import { getAuth } from "@clerk/react-router/ssr.server";
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import { createRequestHandler } from "react-router";
 import * as schema from "../database/schema";
+import { createRepositoryFactory } from "../app/repositories/RepositoryFactory";
+import { RepositoryFactory } from "../app/repositories/RepositoryFactory";
 
 interface Env extends Cloudflare.Env {
   VITE_CLERK_PUBLISHABLE_KEY: string;
@@ -15,6 +17,7 @@ declare module "react-router" {
       ctx: ExecutionContext;
     };
     db: DrizzleD1Database<typeof schema>;
+    dbRepository: RepositoryFactory;
     getCurrentUser: (loaderArgs: any) => Promise<{
       email: string | null;
       isAdmin: boolean;
@@ -38,6 +41,7 @@ const requestHandler = createRequestHandler(
 export default {
   async fetch(request, env, ctx) {
     const db = drizzle(env.DB, { schema });
+    const dbRepository = createRepositoryFactory(db);
 
     const getCurrentUser = async (args: any) => {
       const auth = await getAuth(args);
@@ -84,8 +88,6 @@ export default {
         });
       }
 
-      console.log(result);
-
       if (result) {
         throw result;
       }
@@ -118,6 +120,7 @@ export default {
     return requestHandler(request, {
       cloudflare: { env, ctx },
       db,
+      dbRepository,
       getCurrentUser,
       assertAdminUser,
       assertLoggedInUser,

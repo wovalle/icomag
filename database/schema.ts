@@ -7,12 +7,6 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-export const guestBook = sqliteTable("guest_book", {
-  id: integer().primaryKey({ autoIncrement: true }),
-  name: text().notNull(),
-  email: text().notNull().unique(),
-});
-
 // Owners table to track all apartment owners
 export const owners = sqliteTable("owners", {
   id: integer().primaryKey({ autoIncrement: true }),

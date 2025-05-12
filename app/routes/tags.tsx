@@ -12,11 +12,10 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const isAdmin = user?.isAdmin || false;
 
   try {
-    const tagsList = await context.db.query.transactionTags.findMany({
-      orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
-      with: {
-        parentTag: true,
-      },
+    const tagsRepository = context.dbRepository.getTransactionTagsRepository();
+    const tagsList = await tagsRepository.findMany({
+      orderBy: [{ column: transactionTags.name, direction: "asc" }],
+      with: { parentTag: true },
     });
 
     return { tags: tagsList, error: null, isAdmin };
@@ -42,16 +41,18 @@ export async function action({ request, context }: Route.ActionArgs) {
   const parentId = formData.get("parent_id") || null;
 
   try {
-    await context.db.insert(transactionTags).values({
+    // Using our custom repository which will trigger the afterCreate hook
+    const tagsRepository = context.dbRepository.getTransactionTagsRepository();
+
+    // The afterCreate hook will automatically run after the tag is created
+    const newTag = await tagsRepository.create({
       name,
       description,
       color,
       parent_id: parentId ? parseInt(parentId as string) : null,
-      created_at: Math.floor(Date.now() / 1000),
-      updated_at: Math.floor(Date.now() / 1000),
     });
 
-    return { success: true };
+    return { success: true, tag: newTag };
   } catch (error) {
     console.error("Error creating tag:", error);
     return { success: false, error: "Failed to create tag" };
