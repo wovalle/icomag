@@ -1,4 +1,4 @@
-import { and, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, not, or, sql } from "drizzle-orm";
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 import {
@@ -339,6 +339,8 @@ export class TransactionService {
     startDate,
     endDate,
     searchTerm,
+    noOwner = false,
+    noTags = false,
     page = 1,
     limit = 20,
   }: {
@@ -348,6 +350,8 @@ export class TransactionService {
     startDate?: string | null;
     endDate?: string | null;
     searchTerm?: string | null;
+    noOwner?: boolean;
+    noTags?: boolean;
     page?: number;
     limit?: number;
   }): Promise<{
@@ -366,7 +370,10 @@ export class TransactionService {
       let whereClause = [];
       const offset = (page - 1) * limit;
 
-      if (ownerId) {
+      // Owner filtering
+      if (noOwner) {
+        whereClause.push(isNull(transactions.owner_id));
+      } else if (ownerId) {
         whereClause.push(eq(transactions.owner_id, parseInt(ownerId)));
       }
 
@@ -377,7 +384,7 @@ export class TransactionService {
       // Add date range filters
       if (startDate) {
         const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
-        whereClause.push(eq(transactions.date, startTimestamp));
+        whereClause.push(sql`${transactions.date} >= ${startTimestamp}`);
       }
 
       if (endDate) {
@@ -385,7 +392,7 @@ export class TransactionService {
         const endTimestamp = Math.floor(
           new Date(endDate + "T23:59:59").getTime() / 1000
         );
-        whereClause.push(eq(transactions.date, endTimestamp));
+        whereClause.push(sql`${transactions.date} <= ${endTimestamp}`);
       }
 
       if (searchTerm) {
@@ -424,6 +431,21 @@ export class TransactionService {
         },
       });
 
+      // If filtering by tag or noTags, fetch relevant transaction IDs
+      let transactionIdsWithAnyTags: number[] = [];
+      
+      if (tagId || noTags) {
+        // Get all transaction IDs that have any tags
+        const transactionsWithAnyTag = await this.db
+          .select({ transaction_id: transactionToTags.transaction_id })
+          .from(transactionToTags)
+          .groupBy(transactionToTags.transaction_id);
+
+        transactionIdsWithAnyTags = transactionsWithAnyTag.map(
+          (t) => t.transaction_id
+        );
+      }
+
       // If filtering by tag, we need to handle parent-child tag relationships
       if (tagId) {
         const parsedTagId = parseInt(tagId);
@@ -450,6 +472,12 @@ export class TransactionService {
         // Filter transactions to only include those with any of the relevant tags
         transactionsList = transactionsList.filter((transaction) =>
           transactionIdsWithTag.includes(transaction.id)
+        );
+      } 
+      // If filtering by noTags, filter out transactions that have any tags
+      else if (noTags) {
+        transactionsList = transactionsList.filter(
+          (transaction) => !transactionIdsWithAnyTags.includes(transaction.id)
         );
       }
 

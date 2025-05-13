@@ -1,6 +1,10 @@
+## current balance
+
+agregar el monto estimado de dinero en la cuenta en el homepage y agregar un subitem en el menu actualizar monto
+
 ## next
 
-I want to be able to upload bills to transactions.
+I want to be able to upload bills to transactions. This new entity will be called attachments.
 
 I just configured an R2 bucket and is accessible via env.R2. Read this documentation to know how to do it: https://developers.cloudflare.com/r2/api/workers/workers-api-usage/
 

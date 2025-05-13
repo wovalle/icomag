@@ -12,19 +12,12 @@ import {
   transactionToTags,
   transactions,
 } from "../../database/schema";
-import {
-  requireAdmin,
-  requireAuthentication,
-} from "../components/ProtectedRoute";
 import { formatters } from "../services/transactionService";
 
 import type { Route } from "./+types/transactions.$id";
 
-export async function loader({ context, params }: Route.LoaderArgs) {
-  // Check if the user is authenticated
-  const authResult = await requireAuthentication({ context });
-  console.log("authResult", authResult);
-  if (authResult) return authResult;
+export async function loader({ context, request, params }: Route.LoaderArgs) {
+  await context.assertLoggedInUser({ request, context });
 
   const id = parseInt(params.id || "0");
 
@@ -40,8 +33,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
 
   try {
     // Get current user info
-    const userInfo = context.getCurrentUser();
-    const isAdmin = userInfo.isAdmin;
+    const userInfo = await context.getCurrentUser({ request, context });
 
     // Fetch transaction with owner
     const transaction = await context.db.query.transactions.findFirst({
@@ -56,7 +48,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
         transaction: null,
         owners: [],
         allTags: [],
-        isAdmin,
+        isAdmin: userInfo.isAdmin,
         error: "Transaction not found",
       };
     }
@@ -92,7 +84,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       },
       owners: ownersList,
       allTags: allTagsList,
-      isAdmin,
+      isAdmin: userInfo.isAdmin,
       error: null,
     };
   } catch (error) {
@@ -108,9 +100,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
-  // Check if the user is an admin
-  const adminResult = await requireAdmin({ context });
-  if (adminResult) return adminResult;
+  await context.assertAdminUser({ request, context });
 
   const formData = await request.formData();
   const intent = formData.get("intent");

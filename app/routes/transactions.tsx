@@ -34,23 +34,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const endDate = url.searchParams.get("endDate");
     const page = parseInt(url.searchParams.get("page") || "1");
     const searchTerm = url.searchParams.get("search") || "";
+    // Add new filter parameters
+    const noOwner = url.searchParams.get("noOwner") === "true";
+    const noTags = url.searchParams.get("noTags") === "true";
     const limit = 20;
 
-    // Get transactions with filters
-    const transactionsResult = await transactionService.getTransactions({
-      ownerId,
-      transactionType,
-      tagId,
-      startDate,
-      endDate,
-      searchTerm,
-      page,
-      limit,
-    });
-
-    // Get owners and tags
-    const ownersResult = await transactionService.getOwners();
-    const tagsResult = await transactionService.getTags();
+    // Run all queries in parallel with Promise.all
+    const [transactionsResult, ownersResult, tagsResult] = await Promise.all([
+      transactionService.getTransactions({
+        ownerId,
+        transactionType,
+        tagId,
+        startDate,
+        endDate,
+        searchTerm,
+        noOwner,
+        noTags,
+        page,
+        limit,
+      }),
+      transactionService.getOwners(),
+      transactionService.getTags(),
+    ]);
 
     return {
       transactions: transactionsResult.transactions || [],
@@ -64,6 +69,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         search: searchTerm,
         startDate,
         endDate,
+        noOwner,
+        noTags,
       },
       isAdmin: user.isAdmin,
       error:
@@ -91,6 +98,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         search: null,
         startDate: null,
         endDate: null,
+        noOwner: null,
+        noTags: null,
       },
       isAdmin: false,
       error: "Failed to load transactions",
@@ -205,6 +214,8 @@ export default function TransactionsPage() {
     search: string;
     startDate: string;
     endDate: string;
+    noOwner: boolean;
+    noTags: boolean;
   }) => {
     const newParams = new URLSearchParams();
 
@@ -214,6 +225,8 @@ export default function TransactionsPage() {
     if (filters.search) newParams.append("search", filters.search);
     if (filters.startDate) newParams.append("startDate", filters.startDate);
     if (filters.endDate) newParams.append("endDate", filters.endDate);
+    if (filters.noOwner) newParams.append("noOwner", "true");
+    if (filters.noTags) newParams.append("noTags", "true");
     newParams.append("page", "1"); // Reset to first page on filter change
 
     setSearchParams(newParams);
@@ -315,7 +328,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold">Transactions</h1>
           <p className="text-gray-500">
@@ -323,13 +336,16 @@ export default function TransactionsPage() {
           </p>
         </div>
         {isAdmin && (
-          <div className="join">
-            <Link to="/batches/import" className="btn btn-secondary join-item">
+          <div className="join w-full sm:w-auto">
+            <Link
+              to="/batches/import"
+              className="btn btn-secondary join-item flex-1 sm:flex-none"
+            >
               Import Transactions
             </Link>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="btn btn-primary join-item"
+              className="btn btn-primary join-item flex-1 sm:flex-none"
             >
               Add Transaction
             </button>

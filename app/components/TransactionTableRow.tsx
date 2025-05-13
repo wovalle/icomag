@@ -114,7 +114,7 @@ export default function TransactionTableRow({
   }, [autoAssignFetcher.data, transaction.id, onOwnerChange, isAdmin]);
 
   // Apply opacity styling based on register mode and the transaction properties
-  const rowStyle = registerMode 
+  const rowStyle = registerMode
     ? { opacity: opacity, transition: "opacity 0.2s" }
     : {};
 

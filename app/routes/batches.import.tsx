@@ -15,10 +15,8 @@ type ImportLoaderData = {
   error: string | null;
 };
 
-export async function loader({ context }: Route.LoaderArgs) {
-  // Check if the user is an admin
-  const adminResult = await requireAdmin({ context });
-  if (adminResult) return adminResult;
+export async function loader({ context, request }: Route.LoaderArgs) {
+  await context.assertAdminUser({ context, request });
 
   return { error: null };
 }
