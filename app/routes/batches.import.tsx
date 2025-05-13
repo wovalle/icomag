@@ -7,7 +7,6 @@ import {
   transactionToTags,
   transactions,
 } from "../../database/schema";
-import { requireAdmin } from "../components/ProtectedRoute";
 import { parsePopularTransactionsFile } from "../services/bankFileParser";
 import type { Route } from "./+types/batches.import";
 
@@ -22,9 +21,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  // Check if the user is an admin
-  const adminResult = await requireAdmin({ context });
-  if (adminResult) return adminResult;
+  await context.assertAdminUser({ context, request });
 
   const formData = await request.formData();
   const file = formData.get("csvFile");

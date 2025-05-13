@@ -11,7 +11,7 @@
     }
   },
   "vars": {
-    "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
+    "VITE_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsud2lsbHkuaW0k"
   },
   "d1_databases": [
     {
