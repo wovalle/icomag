@@ -39,15 +39,24 @@ export default function TransactionFilters({
   const [startDate, setStartDate] = useState(initialFilters.startDate || "");
   const [endDate, setEndDate] = useState(initialFilters.endDate || "");
 
-  const applyFilters = () => {
-    onApplyFilters({
-      type: filterType,
-      ownerId: filterOwner,
-      tagId: filterTag,
-      search: searchTerm,
-      startDate: startDate,
-      endDate: endDate,
-    });
+  // Update filters whenever any control changes
+  const handleFilterChange = (
+    updater: React.Dispatch<React.SetStateAction<string>>,
+    value: string
+  ) => {
+    updater(value);
+
+    // Apply filters after a short delay to prevent excessive updates during typing
+    setTimeout(() => {
+      onApplyFilters({
+        type: filterType,
+        ownerId: filterOwner,
+        tagId: filterTag,
+        search: searchTerm,
+        startDate: startDate,
+        endDate: endDate,
+      });
+    }, 0);
   };
 
   const resetFilters = () => {
@@ -62,7 +71,29 @@ export default function TransactionFilters({
 
   return (
     <div className="bg-base-200 p-4 rounded-lg mb-6">
-      <h3 className="font-semibold mb-2">Filter Transactions</h3>
+      <div className="flex justify-between mb-2">
+        <h3 className="font-semibold">Filter Transactions</h3>
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={resetFilters}
+          title="Reset Filters"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            className="w-5 h-5"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+            />
+          </svg>
+        </button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="form-control">
           <label className="label">
@@ -71,7 +102,7 @@ export default function TransactionFilters({
           <select
             className="select select-bordered w-full"
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
+            onChange={(e) => handleFilterChange(setFilterType, e.target.value)}
           >
             <option value="">All Types</option>
             <option value="debit">Debit (Money In)</option>
@@ -85,7 +116,7 @@ export default function TransactionFilters({
           <select
             className="select select-bordered w-full"
             value={filterOwner}
-            onChange={(e) => setFilterOwner(e.target.value)}
+            onChange={(e) => handleFilterChange(setFilterOwner, e.target.value)}
           >
             <option value="">All Owners</option>
             {owners.map((owner) => (
@@ -102,7 +133,7 @@ export default function TransactionFilters({
           <select
             className="select select-bordered w-full"
             value={filterTag}
-            onChange={(e) => setFilterTag(e.target.value)}
+            onChange={(e) => handleFilterChange(setFilterTag, e.target.value)}
           >
             <option value="">All Tags</option>
             {tags.map((tag) => (
@@ -120,7 +151,7 @@ export default function TransactionFilters({
             type="date"
             className="input input-bordered w-full"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => handleFilterChange(setStartDate, e.target.value)}
           />
         </div>
         <div className="form-control">
@@ -131,35 +162,21 @@ export default function TransactionFilters({
             type="date"
             className="input input-bordered w-full"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => handleFilterChange(setEndDate, e.target.value)}
           />
         </div>
         <div className="form-control">
           <label className="label">
             <span className="label-text">Search</span>
           </label>
-          <div className="join w-full">
-            <input
-              type="text"
-              placeholder="Search descriptions, references..."
-              className="input input-bordered join-item flex-grow"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-            />
-            <button className="btn join-item" onClick={applyFilters}>
-              Search
-            </button>
-          </div>
+          <input
+            type="text"
+            placeholder="Search descriptions, references..."
+            className="input input-bordered w-full"
+            value={searchTerm}
+            onChange={(e) => handleFilterChange(setSearchTerm, e.target.value)}
+          />
         </div>
-      </div>
-      <div className="flex justify-end mt-4">
-        <button className="btn btn-outline mr-2" onClick={resetFilters}>
-          Reset Filters
-        </button>
-        <button className="btn btn-primary" onClick={applyFilters}>
-          Apply Filters
-        </button>
       </div>
     </div>
   );

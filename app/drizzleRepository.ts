@@ -1,6 +1,10 @@
 import { eq, SQL, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-import type { SQLiteColumn, SQLiteTable, SQLiteTransaction } from "drizzle-orm/sqlite-core";
+import type {
+  SQLiteColumn,
+  SQLiteTable,
+  SQLiteTransaction,
+} from "drizzle-orm/sqlite-core";
 import * as schema from "../database/schema";
 import { createRepositoryFactory } from "./repositories/RepositoryFactory";
 
@@ -21,10 +25,10 @@ export type Transaction = SQLiteTransaction<typeof schema>;
  */
 export class DatabaseError extends Error {
   fieldErrors?: Record<string, string[]>;
-  
+
   constructor(message: string, fieldErrors?: Record<string, string[]>) {
     super(message);
-    this.name = 'DatabaseError';
+    this.name = "DatabaseError";
     this.fieldErrors = fieldErrors;
   }
 }
@@ -51,17 +55,28 @@ export class DrizzleRepository<T extends SQLiteTable> {
     try {
       const { where, pagination, orderBy, with: relations, tx } = params || {};
       const dbInstance = tx || this.db;
-      
+
       // Check if we can use the prepared queries
       if (dbInstance.query && this.table.$tableName) {
-        const queryBuilder = dbInstance.query[this.table.$tableName as keyof typeof dbInstance.query];
-        
+        const queryBuilder =
+          dbInstance.query[
+            this.table.$tableName as keyof typeof dbInstance.query
+          ];
+
         // Handle relations if available
-        if (queryBuilder && relations && queryBuilder.findMany && typeof queryBuilder.findMany === 'function') {
+        if (
+          queryBuilder &&
+          relations &&
+          queryBuilder.findMany &&
+          typeof queryBuilder.findMany === "function"
+        ) {
           return queryBuilder.findMany({
             where: where as any,
             limit: pagination?.limit,
-            offset: pagination?.page && pagination?.limit ? (pagination.page - 1) * pagination.limit : undefined,
+            offset:
+              pagination?.page && pagination?.limit
+                ? (pagination.page - 1) * pagination.limit
+                : undefined,
             orderBy: orderBy as any,
             with: relations as any,
           }) as Promise<TReturn[]>;
@@ -70,9 +85,11 @@ export class DrizzleRepository<T extends SQLiteTable> {
 
       // Fallback to basic query without relations
       let queryBuilder = dbInstance.select().from(this.table);
-      
+
       if (where) {
-        queryBuilder = queryBuilder.where(Array.isArray(where) ? sql`${where.join(' AND ')}` : where);
+        queryBuilder = queryBuilder.where(
+          Array.isArray(where) ? sql`${where.join(" AND ")}` : where
+        );
       }
 
       if (pagination) {
@@ -82,9 +99,10 @@ export class DrizzleRepository<T extends SQLiteTable> {
 
       if (orderBy && orderBy.length > 0) {
         orderBy.forEach(({ column, direction }) => {
-          queryBuilder = direction === 'asc' 
-            ? queryBuilder.orderBy(column) 
-            : queryBuilder.orderBy(column, { direction: 'desc' });
+          queryBuilder =
+            direction === "asc"
+              ? queryBuilder.orderBy(column)
+              : queryBuilder.orderBy(column, { direction: "desc" });
         });
       }
 
@@ -105,11 +123,18 @@ export class DrizzleRepository<T extends SQLiteTable> {
     try {
       const { where, with: relations, tx } = params;
       const dbInstance = tx || this.db;
-      
-      let query = dbInstance.query[this.table.$tableName as keyof typeof dbInstance.query];
+
+      let query =
+        dbInstance.query[
+          this.table.$tableName as keyof typeof dbInstance.query
+        ];
 
       // Handle relations if available
-      if (relations && query.findFirst && typeof query.findFirst === 'function') {
+      if (
+        relations &&
+        query.findFirst &&
+        typeof query.findFirst === "function"
+      ) {
         return query.findFirst({
           where: where as any,
           with: relations as any,
@@ -120,7 +145,7 @@ export class DrizzleRepository<T extends SQLiteTable> {
       const result = await dbInstance
         .select()
         .from(this.table)
-        .where(Array.isArray(where) ? sql`${where.join(' AND ')}` : where)
+        .where(Array.isArray(where) ? sql`${where.join(" AND ")}` : where)
         .limit(1);
 
       return result[0] as TReturn | undefined;
@@ -133,15 +158,15 @@ export class DrizzleRepository<T extends SQLiteTable> {
    * Find a record by ID
    */
   async findById<TReturn = unknown>(
-    id: number | string, 
-    params?: { 
+    id: number | string,
+    params?: {
       with?: Record<string, unknown>;
       tx?: Transaction;
     }
   ): Promise<TReturn | undefined> {
     // Find the primary key column - assuming id is the primary key
     const pkColumn = this.getPrimaryKeyColumn();
-    
+
     return this.findOne<TReturn>({
       where: eq(pkColumn, id as any),
       with: params?.with,
@@ -161,27 +186,27 @@ export class DrizzleRepository<T extends SQLiteTable> {
     try {
       // Execute lifecycle hook
       await this.beforeCreate(data);
-      
+
       const dbInstance = options?.tx || this.db;
-      
+
       // Add timestamps if they exist
       const now = Math.floor(Date.now() / 1000);
       const dataWithTimestamps = {
         ...data,
-        ...(this.hasColumn('created_at') && { created_at: now }),
-        ...(this.hasColumn('updated_at') && { updated_at: now }),
+        ...(this.hasColumn("created_at") && { created_at: now }),
+        ...(this.hasColumn("updated_at") && { updated_at: now }),
       };
 
       const result = await dbInstance
         .insert(this.table)
         .values(dataWithTimestamps as any)
         .returning();
-      
+
       // Execute lifecycle hook
       if (result[0]) {
         await this.afterCreate(result[0] as unknown as TReturn);
       }
-      
+
       return result[0] as TReturn;
     } catch (err) {
       throw this.handleError(err);
@@ -200,29 +225,29 @@ export class DrizzleRepository<T extends SQLiteTable> {
     try {
       const dbInstance = options?.tx || this.db;
       const now = Math.floor(Date.now() / 1000);
-      
+
       // Execute lifecycle hook for each item
       for (const item of data) {
         await this.beforeCreate(item);
       }
-      
+
       // Add timestamps if they exist
-      const dataWithTimestamps = data.map(item => ({
+      const dataWithTimestamps = data.map((item) => ({
         ...item,
-        ...(this.hasColumn('created_at') && { created_at: now }),
-        ...(this.hasColumn('updated_at') && { updated_at: now }),
+        ...(this.hasColumn("created_at") && { created_at: now }),
+        ...(this.hasColumn("updated_at") && { updated_at: now }),
       }));
 
       const result = await dbInstance
         .insert(this.table)
         .values(dataWithTimestamps as any)
         .returning();
-      
+
       // Execute lifecycle hook for each result
       for (const item of result) {
         await this.afterCreate(item as unknown as TReturn);
       }
-      
+
       return result as unknown as TReturn[];
     } catch (err) {
       throw this.handleError(err);
@@ -242,14 +267,16 @@ export class DrizzleRepository<T extends SQLiteTable> {
     try {
       const pkColumn = this.getPrimaryKeyColumn();
       const dbInstance = options?.tx || this.db;
-      
+
       // Execute lifecycle hook
       await this.beforeUpdate(data);
 
       // Add updated timestamp if it exists
       const dataWithTimestamp = {
         ...data,
-        ...(this.hasColumn('updated_at') && { updated_at: Math.floor(Date.now() / 1000) }),
+        ...(this.hasColumn("updated_at") && {
+          updated_at: Math.floor(Date.now() / 1000),
+        }),
       };
 
       const result = await dbInstance
@@ -262,7 +289,7 @@ export class DrizzleRepository<T extends SQLiteTable> {
       if (result[0]) {
         await this.afterUpdate(result[0] as unknown as TReturn);
       }
-      
+
       return result[0] as TReturn;
     } catch (err) {
       throw this.handleError(err);
@@ -281,27 +308,29 @@ export class DrizzleRepository<T extends SQLiteTable> {
   ): Promise<TReturn[]> {
     try {
       const dbInstance = options?.tx || this.db;
-      
+
       // Execute lifecycle hook
       await this.beforeUpdate(data);
 
       // Add updated timestamp if it exists
       const dataWithTimestamp = {
         ...data,
-        ...(this.hasColumn('updated_at') && { updated_at: Math.floor(Date.now() / 1000) }),
+        ...(this.hasColumn("updated_at") && {
+          updated_at: Math.floor(Date.now() / 1000),
+        }),
       };
 
       const result = await dbInstance
         .update(this.table)
         .set(dataWithTimestamp as any)
-        .where(Array.isArray(where) ? sql`${where.join(' AND ')}` : where)
+        .where(Array.isArray(where) ? sql`${where.join(" AND ")}` : where)
         .returning();
 
       // Execute lifecycle hook for each result
       for (const item of result) {
         await this.afterUpdate(item as unknown as TReturn);
       }
-      
+
       return result as unknown as TReturn[];
     } catch (err) {
       throw this.handleError(err);
@@ -320,18 +349,16 @@ export class DrizzleRepository<T extends SQLiteTable> {
     try {
       const pkColumn = this.getPrimaryKeyColumn();
       const dbInstance = options?.tx || this.db;
-      
+
       const item = await this.findById(id, { tx: options?.tx });
-      
+
       // Execute lifecycle hook if item exists
       if (item) {
         await this.beforeDelete(item as unknown as Record<string, unknown>);
       }
 
-      await dbInstance
-        .delete(this.table)
-        .where(eq(pkColumn, id as any));
-        
+      await dbInstance.delete(this.table).where(eq(pkColumn, id as any));
+
       // Execute lifecycle hook if item existed
       if (item) {
         await this.afterDelete(item as unknown as Record<string, unknown>);
@@ -352,10 +379,10 @@ export class DrizzleRepository<T extends SQLiteTable> {
   ): Promise<number> {
     try {
       const dbInstance = options?.tx || this.db;
-      
+
       // Get items that will be deleted for hooks
       const items = await this.findMany({ where, tx: options?.tx });
-      
+
       // Execute lifecycle hook for each item
       for (const item of items) {
         await this.beforeDelete(item as unknown as Record<string, unknown>);
@@ -363,14 +390,14 @@ export class DrizzleRepository<T extends SQLiteTable> {
 
       const result = await dbInstance
         .delete(this.table)
-        .where(Array.isArray(where) ? sql`${where.join(' AND ')}` : where)
+        .where(Array.isArray(where) ? sql`${where.join(" AND ")}` : where)
         .returning();
-        
+
       // Execute lifecycle hook for each deleted item
       for (const item of items) {
         await this.afterDelete(item as unknown as Record<string, unknown>);
       }
-      
+
       return result.length;
     } catch (err) {
       throw this.handleError(err);
@@ -388,14 +415,18 @@ export class DrizzleRepository<T extends SQLiteTable> {
   ): Promise<number> {
     try {
       const dbInstance = options?.tx || this.db;
-      
+
       const result = await dbInstance
         .select({ count: sql`count(*)` })
         .from(this.table)
         .where(
-          where ? (Array.isArray(where) ? sql`${where.join(' AND ')}` : where) : undefined
+          where
+            ? Array.isArray(where)
+              ? sql`${where.join(" AND ")}`
+              : where
+            : undefined
         );
-      
+
       return Number(result[0]?.count || 0);
     } catch (err) {
       throw this.handleError(err);
@@ -406,9 +437,7 @@ export class DrizzleRepository<T extends SQLiteTable> {
    * Run a function within a transaction
    * @param callback Function to execute within the transaction
    */
-  async transaction<T>(
-    callback: (tx: Transaction) => Promise<T>
-  ): Promise<T> {
+  async transaction<T>(callback: (tx: Transaction) => Promise<T>): Promise<T> {
     return this.db.transaction(async (tx) => {
       return await callback(tx);
     });
@@ -422,24 +451,24 @@ export class DrizzleRepository<T extends SQLiteTable> {
     // D1 has limited error types compared to PostgreSQL
     if (err instanceof Error) {
       // Check for constraint violations
-      if (err.message.includes('UNIQUE constraint failed')) {
+      if (err.message.includes("UNIQUE constraint failed")) {
         const match = err.message.match(/UNIQUE constraint failed: ([^)]+)/);
         if (match) {
-          const column = match[1].split('.').pop();
-          return new DatabaseError('A record with this value already exists.', {
-            [column || 'field']: ['This value already exists']
+          const column = match[1].split(".").pop();
+          return new DatabaseError("A record with this value already exists.", {
+            [column || "field"]: ["This value already exists"],
           });
         }
       }
-      
+
       // Check for foreign key violations
-      if (err.message.includes('FOREIGN KEY constraint failed')) {
-        return new DatabaseError('Related record does not exist.', {
-          'field': ['Referenced record does not exist']
+      if (err.message.includes("FOREIGN KEY constraint failed")) {
+        return new DatabaseError("Related record does not exist.", {
+          field: ["Referenced record does not exist"],
         });
       }
     }
-    
+
     return err as Error;
   }
 
@@ -448,13 +477,15 @@ export class DrizzleRepository<T extends SQLiteTable> {
    */
   protected getPrimaryKeyColumn(): SQLiteColumn {
     const pkColumn = Object.values(this.table).find(
-      col => col.primary === true
+      (col) => col.primary === true
     ) as SQLiteColumn;
-    
+
     if (!pkColumn) {
-      throw new Error(`No primary key found for table ${this.table.$tableName}`);
+      throw new Error(
+        `No primary key found for table ${this.table.$tableName}`
+      );
     }
-    
+
     return pkColumn;
   }
 
@@ -466,32 +497,32 @@ export class DrizzleRepository<T extends SQLiteTable> {
   }
 
   // Lifecycle hooks - can be overridden by subclasses
-  
+
   /**
    * Called before a record is created
    */
   protected async beforeCreate(data: Record<string, unknown>): Promise<void> {}
-  
+
   /**
    * Called after a record is created
    */
   protected async afterCreate(data: unknown): Promise<void> {}
-  
+
   /**
    * Called before a record is updated
    */
   protected async beforeUpdate(data: Record<string, unknown>): Promise<void> {}
-  
+
   /**
    * Called after a record is updated
    */
   protected async afterUpdate(data: unknown): Promise<void> {}
-  
+
   /**
    * Called before a record is deleted
    */
   protected async beforeDelete(data: Record<string, unknown>): Promise<void> {}
-  
+
   /**
    * Called after a record is deleted
    */

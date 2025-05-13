@@ -2,9 +2,11 @@ import { createClerkClient } from "@clerk/react-router/api.server";
 import { getAuth } from "@clerk/react-router/ssr.server";
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import { createRequestHandler } from "react-router";
+import {
+  RepositoryFactory,
+  createRepositoryFactory,
+} from "../app/repositories/RepositoryFactory";
 import * as schema from "../database/schema";
-import { createRepositoryFactory } from "../app/repositories/RepositoryFactory";
-import { RepositoryFactory } from "../app/repositories/RepositoryFactory";
 
 interface Env extends Cloudflare.Env {
   VITE_CLERK_PUBLISHABLE_KEY: string;

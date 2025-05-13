@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Owner, Tag, Transaction } from "../types";
 import Pagination from "./Pagination";
 import TransactionTableRow from "./TransactionTableRow";
@@ -41,9 +42,21 @@ export default function TransactionTable({
   isAdmin = false,
 }: TransactionTableProps) {
   const { formatCurrency, formatDate } = formatters;
+  const [registerMode, setRegisterMode] = useState(false);
 
   return (
     <div className="bg-base-100 rounded-box shadow">
+      <div className="p-4 flex justify-end">
+        <label className="cursor-pointer label gap-2">
+          <span className="label-text">Register Mode</span>
+          <input
+            type="checkbox"
+            className="checkbox"
+            checked={registerMode}
+            onChange={(e) => setRegisterMode(e.target.checked)}
+          />
+        </label>
+      </div>
       <div className="overflow-x-auto">
         <table className="table table-zebra">
           <thead>
@@ -79,6 +92,14 @@ export default function TransactionTable({
                   onAddTag={onAddTag}
                   onRemoveTag={onRemoveTag}
                   isAdmin={isAdmin}
+                  registerMode={registerMode}
+                  opacity={
+                    registerMode &&
+                    (transaction.owner_id ||
+                      (transaction.tags && transaction.tags.length > 0))
+                      ? 0.2
+                      : 1
+                  }
                 />
               ))
             )}

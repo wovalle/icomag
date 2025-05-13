@@ -16,6 +16,8 @@ interface TransactionTableRowProps {
   onAddTag: (transactionId: number, tagId: string) => Promise<void>;
   onRemoveTag: (transactionId: number, tagId: number) => Promise<void>;
   isAdmin?: boolean;
+  registerMode?: boolean;
+  opacity?: number;
 }
 
 export default function TransactionTableRow({
@@ -29,6 +31,8 @@ export default function TransactionTableRow({
   onAddTag,
   onRemoveTag,
   isAdmin = false,
+  registerMode = false,
+  opacity = 1,
 }: TransactionTableRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
@@ -109,8 +113,13 @@ export default function TransactionTableRow({
     }
   }, [autoAssignFetcher.data, transaction.id, onOwnerChange, isAdmin]);
 
+  // Apply opacity styling based on register mode and the transaction properties
+  const rowStyle = registerMode 
+    ? { opacity: opacity, transition: "opacity 0.2s" }
+    : {};
+
   return (
-    <tr>
+    <tr style={rowStyle}>
       <td>{formatDate(transaction.date)}</td>
       <td className="max-w-xs">
         {isEditing ? (
