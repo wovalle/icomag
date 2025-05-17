@@ -158,11 +158,7 @@ export default function TransactionTable({
                     isAdmin={isAdmin}
                     registerMode={registerMode}
                     opacity={
-                      registerMode &&
-                      (transaction.owner_id ||
-                        (transaction.tags && transaction.tags.length > 0))
-                        ? 0.2
-                        : 1
+                      registerMode && transaction.tags.length > 0 ? 0.2 : 1
                     }
                   />
                 ))
@@ -187,11 +183,7 @@ export default function TransactionTable({
                   className="card bg-base-100 border border-base-300"
                   style={{
                     opacity:
-                      registerMode &&
-                      (transaction.owner_id ||
-                        (transaction.tags && transaction.tags.length > 0))
-                        ? 0.2
-                        : 1,
+                      registerMode && transaction.tags.length > 0 ? 0.2 : 1,
                   }}
                 >
                   <div className="card-body p-4">
@@ -269,7 +261,7 @@ export default function TransactionTable({
                     <div className="mt-2">
                       <div className="text-sm font-medium mb-1">Tags:</div>
                       <div className="flex flex-wrap gap-1">
-                        {transaction.tags && transaction.tags.length > 0 ? (
+                        {transaction.tags.length > 0 ? (
                           transaction.tags.map((tag) => (
                             <div
                               key={tag.id}

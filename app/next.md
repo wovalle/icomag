@@ -1,3 +1,17 @@
+## Transacciones pendientes:
+
+Tantas transacciones sin taggear
+
+## último procesamiento de archivo
+
+La ultima vez que tengo transaciones es tal día
+
+## Anuncios generales
+
+Decisiones que toma el comité de administración
+
+# Register mode only for admins
+
 ## current balance
 
 agregar el monto estimado de dinero en la cuenta en el homepage y agregar un subitem en el menu actualizar monto

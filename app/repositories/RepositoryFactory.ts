@@ -1,6 +1,7 @@
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 import { DrizzleRepository } from "../drizzleRepository";
+import { KVStoreRepository } from "./KVStoreRepository";
 import { TransactionTagsRepository } from "./TransactionTagsRepository";
 
 /**
@@ -40,6 +41,10 @@ export class RepositoryFactory {
 
   getTransactionToTagsRepository() {
     return new DrizzleRepository(this.db, schema.transactionToTags);
+  }
+
+  getKVStoreRepository() {
+    return new KVStoreRepository(this.db);
   }
 
   // Generic repository for any table (less type-safe)

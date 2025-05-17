@@ -42,6 +42,11 @@ export function Menu() {
               </Link>
             </li>
             <li>
+              <Link to="/balance" className={isActive("/balance")}>
+                Balance
+              </Link>
+            </li>
+            <li>
               <Link to="/owners" className={isActive("/owners")}>
                 Owners
               </Link>
@@ -72,6 +77,14 @@ export function Menu() {
           <li>
             <Link to="/" className={`btn btn-ghost ${isActive("/")}`}>
               Home
+            </Link>
+          </li>
+          <li>
+            <Link
+              to="/balance"
+              className={`btn btn-ghost ${isActive("/balance")}`}
+            >
+              Balance
             </Link>
           </li>
           <li>

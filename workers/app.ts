@@ -33,7 +33,7 @@ declare module "react-router" {
 }
 
 // List of admin emails
-const ADMIN_EMAILS = ["hey@willy.im"];
+const ADMIN_EMAILS = ["hey@willy.im", "eliascaseres@gmail.com"];
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),

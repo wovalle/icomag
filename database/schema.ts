@@ -135,6 +135,15 @@ export const transactionToTags = sqliteTable("transaction_to_tags", {
     .$defaultFn(() => Math.floor(Date.now() / 1000)),
 });
 
+// KV table to store configuration and settings
+export const kvStore = sqliteTable("kv_store", {
+  key: text().primaryKey().notNull(),
+  value: text().notNull(),
+  updated_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
 // Define relations for owners
 export const ownersRelations = relations(owners, ({ many }) => ({
   transactions: many(transactions),

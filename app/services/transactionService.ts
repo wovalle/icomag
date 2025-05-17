@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, like, not, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 import {
@@ -433,7 +433,7 @@ export class TransactionService {
 
       // If filtering by tag or noTags, fetch relevant transaction IDs
       let transactionIdsWithAnyTags: number[] = [];
-      
+
       if (tagId || noTags) {
         // Get all transaction IDs that have any tags
         const transactionsWithAnyTag = await this.db
@@ -473,7 +473,7 @@ export class TransactionService {
         transactionsList = transactionsList.filter((transaction) =>
           transactionIdsWithTag.includes(transaction.id)
         );
-      } 
+      }
       // If filtering by noTags, filter out transactions that have any tags
       else if (noTags) {
         transactionsList = transactionsList.filter(
