@@ -1,4 +1,5 @@
 {
+  "terminal.integrated.shellIntegration.enabled": false,
   "github.copilot.chat.codeGeneration.instructions": [
     {
       "file": "./.vscode/daisyui.md"

@@ -122,7 +122,7 @@ export default {
       }
     };
 
-    const attachmentService = new AttachmentService(db, env.R2, {
+    const attachmentService = new AttachmentService(db, {
       accessKeyId: env.R2_ACCESS_KEY_ID,
       secretAccessKey: env.R2_SECRET_ACCESS_KEY,
       accountId: env.R2_ACCOUNT_ID,

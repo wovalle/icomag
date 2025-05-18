@@ -15,14 +15,12 @@ export type DB = DrizzleD1Database<typeof schema>;
  */
 export class AttachmentService {
   private db: DB;
-  private r2Bucket: R2Bucket;
   private awsClient: AwsClient;
   private accountId: string;
   private bucketName: string;
 
   constructor(
     db: DB,
-    r2Bucket: R2Bucket,
     r2Config: {
       accessKeyId: string;
       secretAccessKey: string;
@@ -31,7 +29,6 @@ export class AttachmentService {
     }
   ) {
     this.db = db;
-    this.r2Bucket = r2Bucket;
 
     if (
       !r2Config.accessKeyId ||
@@ -147,27 +144,6 @@ export class AttachmentService {
 
       if (!attachment) {
         return { success: false, error: "Attachment not found" };
-      }
-
-      // Create the URL for the DELETE request
-      const url = new URL(
-        `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com`
-      );
-      url.pathname = `/${attachment.r2_key}`;
-
-      // Create a signed request for delete operation
-      const signedRequest = await this.awsClient.sign(
-        new Request(url, {
-          method: "DELETE",
-        })
-      );
-
-      // Execute the request to delete the file
-      const response = await fetch(signedRequest);
-
-      if (!response.ok && response.status !== 404) {
-        // 404 is acceptable as it means the file is already gone
-        throw new Error(`Delete failed with status: ${response.status}`);
       }
 
       // Delete the metadata from the database

@@ -54,7 +54,7 @@ export class BalanceService {
       this.repositoryFactory.getTransactionBatchesRepository();
 
     const batches = await batchesRepo.findMany({
-      orderBy: [{ column: "processed_at", direction: "desc" }],
+      orderBy: { column: "processed_at", direction: "desc" },
       pagination: { limit: 1 },
     });
 
@@ -74,18 +74,7 @@ export class BalanceService {
   /**
    * Calculate the estimated current balance by adding all transactions since the last recorded balance
    */
-  async getEstimatedBalance(): Promise<{
-    currentBalance: number | null;
-    estimatedBalance: number | null;
-    balanceDate: Date | null;
-    transactionsSince: number;
-    lastBatch: {
-      id: number;
-      filename: string;
-      processedAt: Date;
-      totalTransactions: number;
-    } | null;
-  }> {
+  async getEstimatedBalance() {
     const currentBalance = await this.getCurrentBalance();
     const lastBatch = await this.getLastProcessedBatch();
 

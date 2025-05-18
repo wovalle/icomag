@@ -7,9 +7,7 @@ import type { Route } from "./+types/_index";
 
 export const loader = async ({ request, context }: Route.LoaderArgs) => {
   const balanceService = new BalanceService(context.dbRepository);
-
   const balanceInfo = await balanceService.getEstimatedBalance();
-
   return { balanceInfo };
 };
 
