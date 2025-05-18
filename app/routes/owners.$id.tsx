@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import { Form, Link, useActionData, useNavigate } from "react-router";
 import type { Route } from "./+types/owners.$id";
@@ -31,7 +31,10 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
     // Get recent transactions for this owner
     const recentTransactions = await context.db.query.transactions.findMany({
-      where: eq(transactions.owner_id, ownerId),
+      where: and(
+        eq(transactions.owner_id, ownerId),
+        eq(transactions.is_duplicate, 0)
+      ),
       orderBy: (transactions, { desc }) => [desc(transactions.date)],
       limit: 5,
     });

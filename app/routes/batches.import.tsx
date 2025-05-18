@@ -1,12 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { useState } from "react";
 import { Form, Link, redirect, useLoaderData } from "react-router";
-import {
-  transactionBatches,
-  transactionTags,
-  transactionToTags,
-  transactions,
-} from "../../database/schema";
+import { transactionBatches, transactions } from "../../database/schema";
 import { parsePopularTransactionsFile } from "../services/bankFileParser";
 import type { Route } from "./+types/batches.import";
 
@@ -65,29 +60,6 @@ export async function action({ request, context }: Route.ActionArgs) {
         created_at: Math.floor(Date.now() / 1000),
       })
       .returning();
-
-    // Create a batch tag if it doesn't exist
-    const batchTagName = `b-${batchRecord.id}`;
-
-    // Check if the tag already exists
-    let batchTag = await context.db.query.transactionTags.findFirst({
-      where: eq(transactionTags.name, batchTagName),
-    });
-
-    // If the tag doesn't exist, create it
-    if (!batchTag) {
-      const [newTag] = await context.db
-        .insert(transactionTags)
-        .values({
-          name: batchTagName,
-          description: `Transactions from batch ${batchRecord.id}`,
-          created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .returning();
-
-      batchTag = newTag;
-    }
 
     // Get all owner patterns for pattern matching
     const allOwnerPatterns = usePatternMatching
@@ -150,13 +122,6 @@ export async function action({ request, context }: Route.ActionArgs) {
             updated_at: Math.floor(Date.now() / 1000),
           })
           .returning();
-
-        // Add batch tag to duplicate transaction
-        await context.db.insert(transactionToTags).values({
-          transaction_id: duplicateTransaction.id,
-          tag_id: batchTag.id,
-          created_at: Math.floor(Date.now() / 1000),
-        });
       } else {
         // Create new transaction
         newTransactions++;
@@ -178,13 +143,6 @@ export async function action({ request, context }: Route.ActionArgs) {
             updated_at: Math.floor(Date.now() / 1000),
           })
           .returning();
-
-        // Add batch tag to new transaction
-        await context.db.insert(transactionToTags).values({
-          transaction_id: newTransaction.id,
-          tag_id: batchTag.id,
-          created_at: Math.floor(Date.now() / 1000),
-        });
       }
     }
 

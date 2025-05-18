@@ -315,7 +315,7 @@ export default function TransactionTableRow({
         )}
       </td>
       <td>
-        {isAdmin ? (
+        {isAdmin && !transaction.owner_id ? (
           <select
             className="select select-sm select-bordered w-full max-w-xs"
             value={transaction.owner_id || ""}
@@ -329,16 +329,16 @@ export default function TransactionTableRow({
               </option>
             ))}
           </select>
+        ) : transaction.owner_id ? (
+          <Link
+            to={`/transactions?ownerId=${transaction.owner_id}`}
+            className="link link-primary"
+          >
+            {owners.find((o) => o.id === transaction.owner_id)?.name} (
+            {owners.find((o) => o.id === transaction.owner_id)?.apartment_id})
+          </Link>
         ) : (
-          <span>
-            {transaction.owner_id
-              ? owners.find((o) => o.id === transaction.owner_id)?.name +
-                ` (${
-                  owners.find((o) => o.id === transaction.owner_id)
-                    ?.apartment_id
-                })`
-              : "No Owner"}
-          </span>
+          <span className="text-base-content/70">No Owner</span>
         )}
       </td>
       <td>
@@ -350,11 +350,20 @@ export default function TransactionTableRow({
                 className="badge text-white gap-1"
                 style={{ backgroundColor: tag.color || "#888" }}
               >
-                {tag.name}
+                <Link
+                  to={`/transactions?tagId=${tag.id}`}
+                  className="hover:brightness-90"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {tag.name}
+                </Link>
                 {isAdmin && (
                   <button
                     className="btn btn-xs btn-circle btn-ghost"
-                    onClick={() => onRemoveTag(transaction.id, tag.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveTag(transaction.id, tag.id);
+                    }}
                     disabled={!isAdmin}
                   >
                     ×
