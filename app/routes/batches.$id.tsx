@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { useState } from "react";
-import { Link, useLoaderData } from "react-router";
+import { Form, Link, useLoaderData, useNavigate } from "react-router";
 import type { Route } from "../+types/root";
 import { transactionBatches, transactions } from "../../database/schema";
 
@@ -69,9 +69,54 @@ export async function loader({ context, params, request }: Route.LoaderArgs) {
   }
 }
 
+export async function action({ context, params, request }: Route.ActionArgs) {
+  await context.assertAdminUser({ context, request, params });
+
+  if (!params.id) {
+    return { success: false, error: "Batch ID is required" };
+  }
+
+  const batchId = parseInt(params.id);
+
+  if (isNaN(batchId)) {
+    return { success: false, error: "Invalid batch ID" };
+  }
+
+  try {
+    // Start a transaction to ensure both operations complete or fail together
+    await context.db.batch([
+      context.db.delete(transactions).where(eq(transactions.batch_id, batchId)),
+
+      context.db
+        .delete(transactionBatches)
+        .where(eq(transactionBatches.id, batchId)),
+    ]);
+
+    return { success: true };
+  } catch (error) {
+    console.error(`Error deleting batch ${batchId}:`, error);
+    return {
+      success: false,
+      error: "Failed to delete batch. Please try again.",
+    };
+  }
+}
+
 export default function BatchDetailPage() {
   const { batch, transactions, error } = useLoaderData<BatchDetailLoaderData>();
   const [showDuplicates, setShowDuplicates] = useState(true);
+  const navigate = useNavigate();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Function to handle the delete confirmation
+  const handleDeleteConfirm = () => {
+    setIsDeleting(true);
+  };
+
+  // Function to handle the delete cancellation
+  const handleDeleteCancel = () => {
+    setIsDeleting(false);
+  };
 
   // Format date function
   const formatDate = (timestamp: number) => {
@@ -100,10 +145,19 @@ export default function BatchDetailPage() {
             View transactions from batch #{batch?.id}
           </p>
         </div>
-        <div>
-          <Link to="/batches" className="btn btn-outline">
+        <div className="join">
+          <Link to="/batches" className="btn btn-outline join-item">
             Back to Batches
           </Link>
+          {batch && (
+            <button
+              onClick={handleDeleteConfirm}
+              className="btn btn-error join-item"
+              disabled={isDeleting}
+            >
+              Delete Batch
+            </button>
+          )}
         </div>
       </div>
 
@@ -111,6 +165,30 @@ export default function BatchDetailPage() {
         <div role="alert" className="alert alert-error mb-4">
           <span>{error}</span>
         </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {isDeleting && (
+        <dialog open className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg">Confirm Deletion</h3>
+            <p className="py-4">
+              Are you sure you want to delete this batch and all its
+              transactions? This action cannot be undone.
+            </p>
+            <div className="modal-action">
+              <Form method="post" onSubmit={() => navigate("/batches")}>
+                <button type="submit" className="btn btn-error">
+                  Yes, Delete
+                </button>
+              </Form>
+              <button className="btn" onClick={handleDeleteCancel}>
+                Cancel
+              </button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={handleDeleteCancel}></div>
+        </dialog>
       )}
 
       {batch && (
