@@ -11,7 +11,8 @@
     }
   },
   "vars": {
-    "VITE_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsud2lsbHkuaW0k"
+    "VITE_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsud2lsbHkuaW0k",
+    "NODE_ENV": "production"
   },
   "d1_databases": [
     {

@@ -42,6 +42,36 @@ export class BalanceService {
   }
 
   /**
+   * Get the last processed batch information
+   */
+  async getLastProcessedBatch(): Promise<{
+    id: number;
+    filename: string;
+    processedAt: Date;
+    totalTransactions: number;
+  } | null> {
+    const batchesRepo =
+      this.repositoryFactory.getTransactionBatchesRepository();
+
+    const batches = await batchesRepo.findMany({
+      orderBy: [{ column: "processed_at", direction: "desc" }],
+      pagination: { limit: 1 },
+    });
+
+    if (!batches || batches.length === 0) {
+      return null;
+    }
+
+    const lastBatch = batches[0];
+    return {
+      id: lastBatch.id,
+      filename: lastBatch.original_filename,
+      processedAt: new Date(lastBatch.processed_at * 1000), // Convert Unix timestamp to Date
+      totalTransactions: lastBatch.total_transactions,
+    };
+  }
+
+  /**
    * Calculate the estimated current balance by adding all transactions since the last recorded balance
    */
   async getEstimatedBalance(): Promise<{
@@ -49,8 +79,15 @@ export class BalanceService {
     estimatedBalance: number | null;
     balanceDate: Date | null;
     transactionsSince: number;
+    lastBatch: {
+      id: number;
+      filename: string;
+      processedAt: Date;
+      totalTransactions: number;
+    } | null;
   }> {
     const currentBalance = await this.getCurrentBalance();
+    const lastBatch = await this.getLastProcessedBatch();
 
     if (!currentBalance) {
       return {
@@ -58,6 +95,7 @@ export class BalanceService {
         estimatedBalance: null,
         balanceDate: null,
         transactionsSince: 0,
+        lastBatch,
       };
     }
 
@@ -87,6 +125,7 @@ export class BalanceService {
       estimatedBalance: currentBalance.balance + transactionSum,
       balanceDate: currentBalance.date,
       transactionsSince: recentTransactions.length,
+      lastBatch,
     };
   }
 }

@@ -193,6 +193,33 @@ export async function action({ request, context }: Route.ActionArgs) {
       owner_id: result.owner_id,
       error: result.error,
     };
+  } else if (intent === "uploadAttachment") {
+    const transaction_id = parseInt(formData.get("transaction_id") as string);
+    const file = formData.get("file") as File;
+
+    if (!file) {
+      return { success: false, error: "No file provided" };
+    }
+
+    const result = await context.attachmentService.uploadAttachment(
+      transaction_id,
+      file
+    );
+    return {
+      success: result.success,
+      attachment: result.attachment,
+      error: result.error,
+    };
+  } else if (intent === "deleteAttachment") {
+    const attachment_id = parseInt(formData.get("attachment_id") as string);
+
+    const result = await context.attachmentService.deleteAttachment(
+      attachment_id
+    );
+    return {
+      success: result.success,
+      error: result.error,
+    };
   }
 
   return { success: false, error: "Invalid action" };

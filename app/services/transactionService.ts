@@ -520,8 +520,32 @@ export class TransactionService {
         tags: transactionTagsMap[transaction.id] || [],
       })) as TransactionWithDetails[];
 
+      // Get attachments for transactions
+      const attachments = await this.db.query.attachments.findMany({
+        where: inArray(
+          schema.attachments.transaction_id,
+          enhancedTransactions.map((t) => t.id)
+        ),
+      });
+
+      // Group attachments by transaction id
+      const transactionAttachmentsMap: Record<number, any[]> =
+        attachments.reduce((acc: Record<number, any[]>, attachment) => {
+          if (!acc[attachment.transaction_id]) {
+            acc[attachment.transaction_id] = [];
+          }
+          acc[attachment.transaction_id].push(attachment);
+          return acc;
+        }, {});
+
+      // Add attachments to each transaction
+      const finalTransactions = enhancedTransactions.map((transaction) => ({
+        ...transaction,
+        attachments: transactionAttachmentsMap[transaction.id] || [],
+      }));
+
       return {
-        transactions: enhancedTransactions,
+        transactions: finalTransactions,
         pagination: {
           totalCount,
           pageCount: Math.ceil(totalCount / limit),
@@ -542,6 +566,57 @@ export class TransactionService {
         },
         success: false,
         error: "Failed to retrieve transactions",
+      };
+    }
+  }
+
+  /**
+   * Get transaction by ID
+   */
+  async getTransactionById(id: number): Promise<{
+    transaction?: TransactionWithDetails;
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const transaction = await this.db.query.transactions.findFirst({
+        where: eq(transactions.id, id),
+      });
+
+      if (!transaction) {
+        return { success: false, error: "Transaction not found" };
+      }
+
+      // Get tags for the transaction
+      const tagsRelations = await this.db.query.transactionToTags.findMany({
+        where: eq(transactionToTags.transaction_id, id),
+        with: {
+          tag: true,
+        },
+      });
+
+      const tags = tagsRelations.map((relation) => relation.tag);
+
+      // Get attachments for the transaction
+      const attachments = await this.db.query.attachments.findMany({
+        where: eq(schema.attachments.transaction_id, id),
+      });
+
+      const transactionWithDetails: TransactionWithDetails = {
+        ...transaction,
+        tags,
+        attachments,
+      };
+
+      return {
+        transaction: transactionWithDetails,
+        success: true,
+      };
+    } catch (error) {
+      console.error("Error retrieving transaction:", error);
+      return {
+        success: false,
+        error: "Failed to retrieve transaction",
       };
     }
   }

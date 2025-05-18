@@ -40,6 +40,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       where: eq(transactions.id, id),
       with: {
         owner: true,
+        attachments: true,
       },
     });
 
@@ -197,6 +198,37 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       console.error("Error removing tag from transaction:", error);
       return { success: false, error: "Failed to remove tag from transaction" };
     }
+  } else if (intent === "uploadAttachment") {
+    const transaction_id = parseInt(formData.get("transaction_id") as string);
+    const file = formData.get("file") as File;
+
+    if (!file || file.size === 0) {
+      return { success: false, error: "File is required" };
+    }
+
+    try {
+      // Here you would implement the file upload logic
+      // For now, we just simulate a successful upload
+      console.log("Uploading file:", file.name);
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      return { success: false, error: "Failed to upload file" };
+    }
+  } else if (intent === "deleteAttachment") {
+    const attachment_id = formData.get("attachment_id");
+
+    try {
+      // Here you would implement the file deletion logic
+      // For now, we just simulate a successful deletion
+      console.log("Deleting attachment ID:", attachment_id);
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting attachment:", error);
+      return { success: false, error: "Failed to delete attachment" };
+    }
   }
 
   return { success: false, error: "Invalid action" };
@@ -216,6 +248,15 @@ export default function TransactionDetail() {
   const [editedDescription, setEditedDescription] = useState("");
   const [selectedTagId, setSelectedTagId] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Function to format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   useEffect(() => {
     if (transaction) {
@@ -607,6 +648,117 @@ export default function TransactionDetail() {
                 >
                   Add
                 </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* New Card for Attachments */}
+        <div className="card bg-base-100 shadow-xl">
+          <div className="card-body">
+            <h2 className="card-title">Attachments</h2>
+            <div className="divider"></div>
+
+            {transaction.attachments && transaction.attachments.length > 0 ? (
+              <div className="space-y-4">
+                {transaction.attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center justify-between p-2 bg-base-200 rounded-lg"
+                  >
+                    <div className="flex items-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5 mr-2"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                        />
+                      </svg>
+                      <div>
+                        <p className="font-medium">{attachment.filename}</p>
+                        <p className="text-xs opacity-70">
+                          {formatFileSize(attachment.size)} •{" "}
+                          {new Date(
+                            attachment.created_at * 1000
+                          ).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <a
+                        href={`/transactions/${transaction.id}/attachment/${attachment.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm btn-outline"
+                      >
+                        View
+                      </a>
+                      {isAdmin && (
+                        <Form method="post" action="/transactions">
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="deleteAttachment"
+                          />
+                          <input
+                            type="hidden"
+                            name="attachment_id"
+                            value={attachment.id}
+                          />
+                          <button
+                            type="submit"
+                            className="btn btn-sm btn-error"
+                          >
+                            Delete
+                          </button>
+                        </Form>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm opacity-70">
+                No attachments for this transaction
+              </p>
+            )}
+
+            {isAdmin && (
+              <div className="mt-4">
+                <Form
+                  method="post"
+                  action="/transactions"
+                  encType="multipart/form-data"
+                >
+                  <input type="hidden" name="intent" value="uploadAttachment" />
+                  <input
+                    type="hidden"
+                    name="transaction_id"
+                    value={transaction.id}
+                  />
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      name="file"
+                      className="file-input file-input-bordered file-input-sm w-full"
+                      accept="image/*,application/pdf"
+                      required
+                    />
+                    <button type="submit" className="btn btn-sm btn-primary">
+                      Upload
+                    </button>
+                  </div>
+                  <p className="text-xs mt-1 opacity-70">
+                    Accepted file types: Images, PDF documents
+                  </p>
+                </Form>
               </div>
             )}
           </div>

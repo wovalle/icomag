@@ -17,5 +17,9 @@ export default [
   route("/owners/:id/patterns", "./routes/owners.$id.patterns.tsx"),
   route("/transactions", "./routes/transactions.tsx"),
   route("/transactions/:id", "./routes/transactions.$id.tsx"),
+  route(
+    "/transactions/:id/attachment/:attachmentId",
+    "./routes/transactions.$id.attachment.$attachmentId.tsx"
+  ),
   route("/balance", "./routes/balance.tsx"),
 ] satisfies RouteConfig;

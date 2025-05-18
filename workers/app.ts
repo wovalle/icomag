@@ -6,10 +6,12 @@ import {
   RepositoryFactory,
   createRepositoryFactory,
 } from "../app/repositories/RepositoryFactory";
+import { AttachmentService } from "../app/services/attachmentService";
 import * as schema from "../database/schema";
 
 interface Env extends Cloudflare.Env {
   VITE_CLERK_PUBLISHABLE_KEY: string;
+  R2: R2Bucket;
 }
 
 declare module "react-router" {
@@ -20,6 +22,7 @@ declare module "react-router" {
     };
     db: DrizzleD1Database<typeof schema>;
     dbRepository: RepositoryFactory;
+    attachmentService: AttachmentService;
     getCurrentUser: (loaderArgs: any) => Promise<{
       email: string | null;
       isAdmin: boolean;
@@ -49,7 +52,7 @@ export default {
       const auth = await getAuth(args);
 
       const user = await createClerkClient({
-        secretKey: process.env.CLERK_SECRET_KEY,
+        secretKey: env.CLERK_SECRET_KEY,
       }).users.getUser(auth.userId ?? "");
 
       return {
@@ -119,10 +122,18 @@ export default {
       }
     };
 
+    const attachmentService = new AttachmentService(db, env.R2, {
+      accessKeyId: env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+      accountId: env.R2_ACCOUNT_ID,
+      bucketName: "icona",
+    });
+
     return requestHandler(request, {
       cloudflare: { env, ctx },
       db,
       dbRepository,
+      attachmentService,
       getCurrentUser,
       assertAdminUser,
       assertLoggedInUser,

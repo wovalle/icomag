@@ -54,6 +54,24 @@ export const transactionBatches = sqliteTable("transaction_batches", {
     .$defaultFn(() => Math.floor(Date.now() / 1000)),
 });
 
+// Attachments table to store file information
+export const attachments = sqliteTable("attachments", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  transaction_id: integer()
+    .references(() => transactions.id, { onDelete: "cascade" })
+    .notNull(),
+  filename: text().notNull(), // Original filename
+  r2_key: text().notNull(), // Key in R2 bucket
+  size: integer().notNull(), // File size in bytes
+  mime_type: text().notNull(), // MIME type of the file
+  created_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+  updated_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
 // Transactions table to track all financial transactions
 export const transactions = sqliteTable("transactions", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -171,8 +189,17 @@ export const transactionsRelations = relations(
       references: [transactionBatches.id],
     }),
     tags: many(transactionToTags),
+    attachments: many(attachments),
   })
 );
+
+// Define relations for attachments
+export const attachmentsRelations = relations(attachments, ({ one }) => ({
+  transaction: one(transactions, {
+    fields: [attachments.transaction_id],
+    references: [transactions.id],
+  }),
+}));
 
 // Define relations for transaction batches
 export const transactionBatchesRelations = relations(

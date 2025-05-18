@@ -18,6 +18,7 @@
   "dependencies": {
     "@clerk/react-router": "^1.4.2",
     "@react-router/fs-routes": "^7.5.3",
+    "aws4fetch": "^1.0.20",
     "daisyui": "^5.0.35",
     "drizzle-orm": "~0.36.3",
     "isbot": "^5.1.27",

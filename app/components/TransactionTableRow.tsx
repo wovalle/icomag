@@ -38,7 +38,10 @@ export default function TransactionTableRow({
   const [editedDescription, setEditedDescription] = useState("");
   const descriptionInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const autoAssignFetcher = useFetcher();
+  const attachmentFetcher = useFetcher();
+  const deleteAttachmentFetcher = useFetcher();
 
   // Start editing description
   const startEditingDescription = () => {
@@ -100,6 +103,39 @@ export default function TransactionTableRow({
     });
   };
 
+  // Handle file upload
+  const handleUploadClick = () => {
+    if (!isAdmin) return;
+
+    // Close the menu after clicking
+    if (menuRef.current) {
+      menuRef.current.open = false;
+    }
+
+    // Trigger file input click
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin || !e.target.files || e.target.files.length === 0) return;
+
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append("intent", "uploadAttachment");
+    formData.append("transaction_id", transaction.id.toString());
+    formData.append("file", file);
+
+    // Use the fetcher to submit this form
+    attachmentFetcher.submit(formData, {
+      method: "POST",
+      action: "/transactions",
+      encType: "multipart/form-data",
+    });
+  };
+
   // Update owner when auto-assign completes successfully
   useEffect(() => {
     if (
@@ -113,10 +149,66 @@ export default function TransactionTableRow({
     }
   }, [autoAssignFetcher.data, transaction.id, onOwnerChange, isAdmin]);
 
+  // Show feedback when attachment upload completes
+  useEffect(() => {
+    if (attachmentFetcher.state === "idle" && attachmentFetcher.data) {
+      if (attachmentFetcher.data.success) {
+        // Successfully uploaded attachment - could add a toast notification here
+        console.log("Attachment uploaded successfully");
+
+        // Reset the file input for future uploads
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      } else if (attachmentFetcher.data.error) {
+        // Failed to upload - could add error toast here
+        console.error(
+          "Failed to upload attachment:",
+          attachmentFetcher.data.error
+        );
+      }
+    }
+  }, [attachmentFetcher.state, attachmentFetcher.data]);
+
+  // Handle attachment deletion feedback
+  useEffect(() => {
+    if (
+      deleteAttachmentFetcher.state === "idle" &&
+      deleteAttachmentFetcher.data
+    ) {
+      if (deleteAttachmentFetcher.data.success) {
+        // Successfully deleted attachment - could add a toast notification here
+        console.log("Attachment deleted successfully");
+      } else if (deleteAttachmentFetcher.data.error) {
+        // Failed to delete - could add error toast here
+        console.error(
+          "Failed to delete attachment:",
+          deleteAttachmentFetcher.data.error
+        );
+      }
+    }
+  }, [deleteAttachmentFetcher.state, deleteAttachmentFetcher.data]);
+
   // Apply opacity styling based on register mode and the transaction properties
   const rowStyle = registerMode
     ? { opacity: opacity, transition: "opacity 0.2s" }
     : {};
+
+  // Handle deleting an attachment
+  const handleDeleteAttachment = (attachmentId: number) => {
+    if (!isAdmin) return;
+
+    if (confirm("Are you sure you want to delete this attachment?")) {
+      const formData = new FormData();
+      formData.append("intent", "deleteAttachment");
+      formData.append("attachment_id", attachmentId.toString());
+
+      deleteAttachmentFetcher.submit(formData, {
+        method: "POST",
+        action: "/transactions",
+      });
+    }
+  };
 
   return (
     <tr style={rowStyle}>
@@ -173,12 +265,64 @@ export default function TransactionTableRow({
             </div>
           )}
       </td>
-      <td
-        className={
-          transaction.type === "credit" ? "text-success" : "text-error"
-        }
-      >
-        {formatCurrency(transaction.amount)}
+      <td>
+        <div
+          className={
+            transaction.type === "credit" ? "text-success" : "text-error"
+          }
+        >
+          {formatCurrency(transaction.amount)}
+          {transaction.attachments && transaction.attachments.length > 0 && (
+            <div className="ml-2 inline-flex items-center">
+              {transaction.attachments.map((attachment, index) => (
+                <div
+                  key={attachment.id}
+                  className="inline-flex items-center mr-1"
+                >
+                  <a
+                    href={`/transactions/${transaction.id}/attachment/${attachment.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center"
+                    title={`View ${attachment.filename}`}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                      />
+                    </svg>
+                    {transaction.attachments &&
+                      transaction.attachments.length > 1 && (
+                        <span className="text-xs ml-0.5">{index + 1}</span>
+                      )}
+                  </a>
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteAttachment(attachment.id);
+                      }}
+                      className="ml-1 text-xs text-error hover:text-error-content hover:bg-error rounded-full p-0.5"
+                      title="Delete attachment"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </td>
       <td>
         {transaction.type === "credit" ? (
@@ -287,6 +431,24 @@ export default function TransactionTableRow({
                 >
                   Auto-assign Owner
                 </button>
+              </li>
+              <li>
+                <button
+                  onClick={handleUploadClick}
+                  className={
+                    attachmentFetcher.state !== "idle" ? "loading" : ""
+                  }
+                  disabled={attachmentFetcher.state !== "idle" || !isAdmin}
+                >
+                  Upload Attachment
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  accept="image/*,application/pdf"
+                />
               </li>
             </ul>
           </details>

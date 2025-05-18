@@ -101,6 +101,32 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
                   </div>
                   <div className="stat-value text-primary">{balance}</div>
                 </div>
+                {balanceInfo.lastBatch && (
+                  <div className="stat">
+                    <div className="stat-title">Last Processed Batch</div>
+                    <div className="stat-value">
+                      {balanceInfo.lastBatch.filename.length > 20
+                        ? `${balanceInfo.lastBatch.filename.substring(
+                            0,
+                            20
+                          )}...`
+                        : balanceInfo.lastBatch.filename}
+                    </div>
+                    <div className="stat-desc">
+                      Processed on{" "}
+                      {new Date(
+                        balanceInfo.lastBatch.processedAt
+                      ).toLocaleDateString()}{" "}
+                      at{" "}
+                      {new Date(
+                        balanceInfo.lastBatch.processedAt
+                      ).toLocaleTimeString()}
+                    </div>
+                    <div className="stat-desc">
+                      {balanceInfo.lastBatch.totalTransactions} transactions
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (

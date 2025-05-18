@@ -71,6 +71,20 @@
       "when": 1747074564288,
       "tag": "0009_foamy_pete_wisdom",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1747493189925,
+      "tag": "0010_daily_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1747495154498,
+      "tag": "0011_cool_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }
