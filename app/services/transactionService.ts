@@ -1,10 +1,9 @@
-import { and, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
+import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 import {
   owners,
   tagPatterns,
-  transactionTags,
   transactionToTags,
   transactions,
 } from "../../database/schema";
@@ -406,19 +405,33 @@ export class TransactionService {
         );
       }
 
+      // Count total transactions for pagination
+      const totalCountResult = await this.db
+        .select({ count: sql`COUNT(*)` })
+        .from(transactions)
+        .leftJoin(
+          transactionToTags,
+          eq(transactions.id, transactionToTags.transaction_id)
+        )
+        .where(
+          and(
+            eq(transactions.is_duplicate, 0),
+            ...whereClause,
+            noTags === true
+              ? isNull(transactionToTags.tag_id)
+              : tagId
+              ? eq(transactionToTags.tag_id, parseInt(tagId))
+              : undefined
+          )
+        );
+
+      const totalCount = Number(totalCountResult[0]?.count || 0);
+
       // Base query for transactions, always filtering out duplicates
       const baseQuery =
         whereClause.length > 0
           ? and(eq(transactions.is_duplicate, 0), ...whereClause)
           : eq(transactions.is_duplicate, 0);
-
-      // Count total transactions for pagination
-      const totalCountResult = await this.db
-        .select({ count: sql`COUNT(*)` })
-        .from(transactions)
-        .where(baseQuery);
-
-      const totalCount = Number(totalCountResult[0]?.count || 0);
 
       // Get transactions with pagination
       let transactionsList = await this.db.query.transactions.findMany({
@@ -428,124 +441,29 @@ export class TransactionService {
         offset,
         with: {
           owner: true,
+          attachments: true,
+          tags: {
+            with: {
+              tag: true,
+            },
+            where:
+              noTags === true
+                ? isNull(transactionToTags.tag_id)
+                : tagId
+                ? eq(transactionToTags.tag_id, parseInt(tagId))
+                : undefined,
+          },
         },
       });
-
-      // If filtering by tag or noTags, fetch relevant transaction IDs
-      let transactionIdsWithAnyTags: number[] = [];
-
-      if (tagId || noTags) {
-        // Get all transaction IDs that have any tags
-        const transactionsWithAnyTag = await this.db
-          .select({ transaction_id: transactionToTags.transaction_id })
-          .from(transactionToTags)
-          .groupBy(transactionToTags.transaction_id);
-
-        transactionIdsWithAnyTags = transactionsWithAnyTag.map(
-          (t) => t.transaction_id
-        );
-      }
-
-      // If filtering by tag, we need to handle parent-child tag relationships
-      if (tagId) {
-        const parsedTagId = parseInt(tagId);
-
-        // First, check if this tag has any children
-        const childTags = await this.db
-          .select()
-          .from(transactionTags)
-          .where(eq(transactionTags.parent_id, parsedTagId));
-
-        // Get all tag IDs we need to filter by (parent + children)
-        const relevantTagIds = [parsedTagId, ...childTags.map((tag) => tag.id)];
-
-        // Get transactions associated with any of these tags
-        const transactionsWithTag = await this.db
-          .select({ transaction_id: transactionToTags.transaction_id })
-          .from(transactionToTags)
-          .where(inArray(transactionToTags.tag_id, relevantTagIds));
-
-        const transactionIdsWithTag = transactionsWithTag.map(
-          (t) => t.transaction_id
-        );
-
-        // Filter transactions to only include those with any of the relevant tags
-        transactionsList = transactionsList.filter((transaction) =>
-          transactionIdsWithTag.includes(transaction.id)
-        );
-      }
-      // If filtering by noTags, filter out transactions that have any tags
-      else if (noTags) {
-        transactionsList = transactionsList.filter(
-          (transaction) => !transactionIdsWithAnyTags.includes(transaction.id)
-        );
-      }
-
-      // Load tags for each transaction
-      const transactionIds = transactionsList.map((t) => t.id);
-
-      // Get all transaction to tag relationships for these transactions
-      const transactionTagRelations =
-        transactionIds.length > 0
-          ? await this.db
-              .select()
-              .from(transactionToTags)
-              .innerJoin(
-                transactionTags,
-                eq(transactionToTags.tag_id, transactionTags.id)
-              )
-              .where(
-                sql`${transactionToTags.transaction_id} IN (${sql.join(
-                  transactionIds,
-                  sql`, `
-                )})`
-              )
-          : [];
-
-      // Group tags by transaction id
-      const transactionTagsMap = transactionTagRelations.reduce(
-        (acc, { transaction_to_tags, transaction_tags }) => {
-          if (!acc[transaction_to_tags.transaction_id]) {
-            acc[transaction_to_tags.transaction_id] = [];
-          }
-          acc[transaction_to_tags.transaction_id].push(transaction_tags);
-          return acc;
-        },
-        {}
-      );
-
-      // Add tags to each transaction
-      const enhancedTransactions = transactionsList.map((transaction) => ({
-        ...transaction,
-        tags: transactionTagsMap[transaction.id] || [],
-      })) as TransactionWithDetails[];
-
-      // Get attachments for transactions
-      const attachments = await this.db.query.attachments.findMany({
-        where: inArray(
-          schema.attachments.transaction_id,
-          enhancedTransactions.map((t) => t.id)
-        ),
-      });
-
-      // Group attachments by transaction id
-      const transactionAttachmentsMap: Record<number, any[]> =
-        attachments.reduce((acc: Record<number, any[]>, attachment) => {
-          if (!acc[attachment.transaction_id]) {
-            acc[attachment.transaction_id] = [];
-          }
-          acc[attachment.transaction_id].push(attachment);
-          return acc;
-        }, {});
-
-      // Add attachments to each transaction
-      const finalTransactions = enhancedTransactions.map((transaction) => ({
-        ...transaction,
-        attachments: transactionAttachmentsMap[transaction.id] || [],
-      }));
 
       return {
-        transactions: finalTransactions,
+        transactions: transactionsList.map((transaction) => {
+          const tags = transaction.tags.map((tag) => tag.tag);
+          return {
+            ...transaction,
+            tags,
+          };
+        }),
         pagination: {
           totalCount,
           pageCount: Math.ceil(totalCount / limit),
@@ -698,6 +616,8 @@ export const formatters = {
    * Formats a timestamp to a date string
    */
   formatDate: (timestamp: number): string => {
-    return new Date(timestamp * 1000).toLocaleDateString();
+    return new Date(timestamp * 1000).toLocaleDateString(undefined, {
+      dateStyle: "medium",
+    });
   },
 };
