@@ -62,56 +62,51 @@ export default function Pagination({
   };
 
   return (
-    <>
-      {pageCount > 1 && (
-        <div className="flex flex-col items-center my-4">
-          <div className="join mb-3">
+    <div className="flex flex-col items-center my-4">
+      <div className="join mb-3">
+        <button
+          className="join-item btn btn-sm sm:btn-md"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          «
+        </button>
+
+        {getVisiblePages().map((link, index) =>
+          typeof link === "number" ? (
             <button
-              className="join-item btn btn-sm sm:btn-md"
-              disabled={currentPage <= 1}
-              onClick={() => onPageChange(currentPage - 1)}
+              key={index}
+              className={`join-item btn btn-sm sm:btn-md ${
+                currentPage === link ? "btn-primary" : ""
+              }`}
+              onClick={() => onPageChange(link)}
             >
-              «
+              {link}
             </button>
-
-            {getVisiblePages().map((link, index) =>
-              typeof link === "number" ? (
-                <button
-                  key={index}
-                  className={`join-item btn btn-sm sm:btn-md ${
-                    currentPage === link ? "btn-primary" : ""
-                  }`}
-                  onClick={() => onPageChange(link)}
-                >
-                  {link}
-                </button>
-              ) : (
-                <button
-                  key={index}
-                  className="join-item btn btn-sm sm:btn-md btn-disabled"
-                >
-                  {link}
-                </button>
-              )
-            )}
-
+          ) : (
             <button
-              className="join-item btn btn-sm sm:btn-md"
-              disabled={currentPage >= pageCount}
-              onClick={() => onPageChange(currentPage + 1)}
+              key={index}
+              className="join-item btn btn-sm sm:btn-md btn-disabled"
             >
-              »
+              {link}
             </button>
-          </div>
+          )
+        )}
 
-          {/* Pagination info */}
-          <div className="text-center text-xs sm:text-sm text-base-content/60 pb-4">
-            Showing {Math.min((currentPage - 1) * limit + 1, totalCount)} -{" "}
-            {Math.min(currentPage * limit, totalCount)} of {totalCount}{" "}
-            transactions
-          </div>
-        </div>
-      )}
-    </>
+        <button
+          className="join-item btn btn-sm sm:btn-md"
+          disabled={currentPage >= pageCount}
+          onClick={() => onPageChange(currentPage + 1)}
+        >
+          »
+        </button>
+      </div>
+
+      {/* Pagination info */}
+      <div className="text-center text-xs sm:text-sm text-base-content/60 pb-4">
+        Showing {Math.min((currentPage - 1) * limit + 1, totalCount)} -{" "}
+        {Math.min(currentPage * limit, totalCount)} of {totalCount} transactions
+      </div>
+    </div>
   );
 }
