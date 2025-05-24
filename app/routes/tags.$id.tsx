@@ -66,7 +66,8 @@ export async function loader({ params, context, request }: Route.LoaderArgs) {
     const recentTransactions = transactionLinks
       .filter((link) => link.transaction !== null)
       .filter((link) => link.transaction.is_duplicate === 0)
-      .map((link) => link.transaction);
+      .map((link) => link.transaction)
+      .sort((a, b) => b.date - a.date); // Sort by date descending, don't know how to do it in drizzle yet
 
     return {
       tag,
