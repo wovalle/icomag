@@ -60,7 +60,7 @@ export async function loader({ params, context, request }: Route.LoaderArgs) {
       with: {
         transaction: true,
       },
-      limit: 5,
+      limit: 20,
     });
 
     const recentTransactions = transactionLinks
