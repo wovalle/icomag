@@ -20,4 +20,6 @@ export type Attachment = InferSelectModel<typeof attachments>;
 // Additional types that might be useful
 export interface TransactionWithDetails extends Transaction {
   owner?: Owner | null;
+  tags: Tag[]; // Transactions include their related tags
+  attachments?: Attachment[]; // Transactions include their related attachments
 }

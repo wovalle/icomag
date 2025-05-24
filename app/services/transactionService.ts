@@ -1,4 +1,4 @@
-import { and, eq, isNull, like, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 import {
@@ -427,14 +427,41 @@ export class TransactionService {
 
       const totalCount = Number(totalCountResult[0]?.count || 0);
 
+      // If noTags is true, filter transactions that have no tags
+      if (noTags) {
+        whereClause.push(
+          inArray(
+            transactions.id,
+            sql`(
+            SELECT t.id
+            FROM transactions t
+            LEFT JOIN transaction_to_tags tt ON t.id = tt.transaction_id
+            WHERE tt.tag_id IS NULL
+            OR tt.tag_id = 0
+          )`
+          )
+        );
+      }
+
+      // If tagId is provided, filter by that tag
+      if (tagId) {
+        whereClause.push(
+          inArray(
+            transactions.id,
+            sql`(
+            SELECT transaction_id
+            FROM transaction_to_tags
+            WHERE tag_id = ${parseInt(tagId)}
+          )`
+          )
+        );
+      }
+
       // Base query for transactions, always filtering out duplicates
-      const baseQuery =
-        whereClause.length > 0
-          ? and(eq(transactions.is_duplicate, 0), ...whereClause)
-          : eq(transactions.is_duplicate, 0);
+      const baseQuery = and(eq(transactions.is_duplicate, 0), ...whereClause);
 
       // Get transactions with pagination
-      let transactionsList = await this.db.query.transactions.findMany({
+      const transactionsList = await this.db.query.transactions.findMany({
         where: baseQuery,
         orderBy: (transactions, { desc }) => [desc(transactions.date)],
         limit,
@@ -446,12 +473,6 @@ export class TransactionService {
             with: {
               tag: true,
             },
-            where:
-              noTags === true
-                ? isNull(transactionToTags.tag_id)
-                : tagId
-                ? eq(transactionToTags.tag_id, parseInt(tagId))
-                : undefined,
           },
         },
       });
