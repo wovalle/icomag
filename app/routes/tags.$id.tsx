@@ -1,4 +1,4 @@
-import { eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import {
   Link,
@@ -9,7 +9,9 @@ import {
   useNavigate,
 } from "react-router";
 import {
+  owners,
   tagPatterns,
+  transactions,
   transactionTags,
   transactionToTags,
 } from "../../database/schema";
@@ -55,19 +57,27 @@ export async function loader({ params, context, request }: Route.LoaderArgs) {
     });
 
     // Get recent transactions for this tag
-    const transactionLinks = await context.db.query.transactionToTags.findMany({
-      where: eq(transactionToTags.tag_id, tagId),
-      with: {
-        transaction: true,
-      },
-      limit: 20,
-    });
+    const relatedTransactions = await context.db
+      .select()
+      .from(transactionToTags)
+      .innerJoin(
+        transactions,
+        eq(transactionToTags.transaction_id, transactions.id)
+      )
+      .leftJoin(owners, eq(owners.id, transactions.owner_id))
+      .where(
+        and(
+          eq(transactionToTags.tag_id, tagId),
+          eq(transactions.is_duplicate, 0)
+        )
+      )
+      .limit(20)
+      .orderBy(desc(transactions.date));
 
-    const recentTransactions = transactionLinks
-      .filter((link) => link.transaction !== null)
-      .filter((link) => link.transaction.is_duplicate === 0)
-      .map((link) => link.transaction)
-      .sort((a, b) => b.date - a.date); // Sort by date descending, don't know how to do it in drizzle yet
+    const recentTransactions = relatedTransactions.map((tt) => ({
+      ...tt.transactions,
+      owner: tt.owners,
+    }));
 
     return {
       tag,
@@ -247,6 +257,13 @@ export default function TagDetailsPage() {
               >
                 Edit Tag
               </button>
+
+              <button
+                onClick={() => setIsPatternModalOpen(true)}
+                className="btn btn-primary join-item"
+              >
+                Add Pattern
+              </button>
               <fetcher.Form
                 method="post"
                 className="inline"
@@ -267,9 +284,6 @@ export default function TagDetailsPage() {
               </fetcher.Form>
             </>
           )}
-          <Link to="/tags" className="btn join-item">
-            Back to Tags
-          </Link>
         </div>
       </div>
 
@@ -305,116 +319,6 @@ export default function TagDetailsPage() {
         </div>
       </div>
 
-      {/* Recognition Patterns Section */}
-      <div className="card shadow-md mb-6">
-        <div className="card-body">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="card-title">Recognition Patterns</h2>
-            {isAdmin && (
-              <button
-                onClick={() => setIsPatternModalOpen(true)}
-                className="btn btn-primary btn-sm"
-              >
-                Add Recognition Pattern
-              </button>
-            )}
-          </div>
-
-          {patterns.length === 0 ? (
-            <div className="text-center py-4">
-              <p>
-                No recognition patterns found. Add a pattern to automatically
-                match transactions.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="table table-zebra">
-                <thead>
-                  <tr>
-                    <th>Pattern</th>
-                    <th>Description</th>
-                    <th>Status</th>
-                    <th className="w-32">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patterns.map((pattern) => (
-                    <tr key={pattern.id}>
-                      <td className="font-mono">{pattern.pattern}</td>
-                      <td>{pattern.description || "N/A"}</td>
-                      <td>
-                        {pattern.is_active ? (
-                          <div className="badge badge-success">Active</div>
-                        ) : (
-                          <div className="badge badge-error">Inactive</div>
-                        )}
-                      </td>
-                      <td className="flex gap-2">
-                        {isAdmin && (
-                          <>
-                            <fetcher.Form
-                              method="post"
-                              action={`/tags/${tag.id}/patterns`}
-                              className="inline"
-                            >
-                              <input
-                                type="hidden"
-                                name="intent"
-                                value="toggle"
-                              />
-                              <input
-                                type="hidden"
-                                name="patternId"
-                                value={pattern.id}
-                              />
-                              <button type="submit" className="btn btn-sm">
-                                {pattern.is_active ? "Deactivate" : "Activate"}
-                              </button>
-                            </fetcher.Form>
-                            <fetcher.Form
-                              method="post"
-                              action={`/tags/${tag.id}/patterns`}
-                              className="inline"
-                              onSubmit={(e) => {
-                                if (
-                                  !confirm(
-                                    "Are you sure you want to delete this pattern?"
-                                  )
-                                ) {
-                                  e.preventDefault();
-                                }
-                              }}
-                            >
-                              <input
-                                type="hidden"
-                                name="intent"
-                                value="delete"
-                              />
-                              <input
-                                type="hidden"
-                                name="patternId"
-                                value={pattern.id}
-                              />
-                              <button
-                                type="submit"
-                                className="btn btn-sm btn-error"
-                              >
-                                Delete
-                              </button>
-                            </fetcher.Form>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Recent Transactions Section */}
       <div className="card shadow-md">
         <div className="card-body">
@@ -436,6 +340,7 @@ export default function TagDetailsPage() {
                   <tr>
                     <th>Date</th>
                     <th>Description</th>
+                    <th>Owner</th>
                     <th>Amount</th>
                     <th>Type</th>
                   </tr>
@@ -445,6 +350,14 @@ export default function TagDetailsPage() {
                     <tr key={transaction.id}>
                       <td>{formatDate(transaction.date)}</td>
                       <td>{transaction.description}</td>
+                      <td>
+                        {transaction.owner && (
+                          <Link
+                            to={`/owners/${transaction.owner_id}`}
+                            className="link link-primary"
+                          >{`${transaction.owner?.name} (${transaction.owner?.apartment_id})`}</Link>
+                        )}
+                      </td>
                       <td
                         className={
                           transaction.type === "credit"
@@ -469,6 +382,120 @@ export default function TagDetailsPage() {
           )}
         </div>
       </div>
+
+      {/* Recognition Patterns Section */}
+      {patterns.length > 0 && (
+        <div className="card shadow-md mb-6">
+          <div className="card-body">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="card-title">Recognition Patterns</h2>
+              {isAdmin && (
+                <button
+                  onClick={() => setIsPatternModalOpen(true)}
+                  className="btn btn-primary btn-sm"
+                >
+                  Add Recognition Pattern
+                </button>
+              )}
+            </div>
+
+            {patterns.length === 0 ? (
+              <div className="text-center py-4">
+                <p>
+                  No recognition patterns found. Add a pattern to automatically
+                  match transactions.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Pattern</th>
+                      <th>Description</th>
+                      <th>Status</th>
+                      <th className="w-32">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patterns.map((pattern) => (
+                      <tr key={pattern.id}>
+                        <td className="font-mono">{pattern.pattern}</td>
+                        <td>{pattern.description || "N/A"}</td>
+                        <td>
+                          {pattern.is_active ? (
+                            <div className="badge badge-success">Active</div>
+                          ) : (
+                            <div className="badge badge-error">Inactive</div>
+                          )}
+                        </td>
+                        <td className="flex gap-2">
+                          {isAdmin && (
+                            <>
+                              <fetcher.Form
+                                method="post"
+                                action={`/tags/${tag.id}/patterns`}
+                                className="inline"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="toggle"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="patternId"
+                                  value={pattern.id}
+                                />
+                                <button type="submit" className="btn btn-sm">
+                                  {pattern.is_active
+                                    ? "Deactivate"
+                                    : "Activate"}
+                                </button>
+                              </fetcher.Form>
+                              <fetcher.Form
+                                method="post"
+                                action={`/tags/${tag.id}/patterns`}
+                                className="inline"
+                                onSubmit={(e) => {
+                                  if (
+                                    !confirm(
+                                      "Are you sure you want to delete this pattern?"
+                                    )
+                                  ) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="delete"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="patternId"
+                                  value={pattern.id}
+                                />
+                                <button
+                                  type="submit"
+                                  className="btn btn-sm btn-error"
+                                >
+                                  Delete
+                                </button>
+                              </fetcher.Form>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Edit Tag Modal */}
       {isEditModalOpen && (
