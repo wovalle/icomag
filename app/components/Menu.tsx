@@ -1,4 +1,3 @@
-import { SignedIn, SignedOut, UserButton } from "@clerk/react-router";
 import { Link, useLocation } from "react-router";
 
 export function Menu() {
@@ -120,14 +119,7 @@ export function Menu() {
         </ul>
       </div>
       <div className="navbar-end">
-        <SignedOut>
-          <Link to="/sign-in" className="btn btn-primary">
-            Sign In
-          </Link>
-        </SignedOut>
-        <SignedIn>
-          <UserButton afterSignOutUrl="/" />
-        </SignedIn>
+        {/* Remove the sign-in link */}
       </div>
     </div>
   );

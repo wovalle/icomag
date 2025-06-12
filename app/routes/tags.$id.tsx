@@ -1,29 +1,22 @@
 import { and, desc, eq, ne } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import {
-  Link,
-  redirect,
-  useActionData,
-  useFetcher,
-  useLoaderData,
-  useNavigate,
+    Link,
+    useActionData,
+    useFetcher,
+    useLoaderData,
+    useNavigate
 } from "react-router";
 import {
-  owners,
-  tagPatterns,
-  transactions,
-  transactionTags,
-  transactionToTags,
+    owners,
+    tagPatterns,
+    transactions,
+    transactionTags,
+    transactionToTags,
 } from "../../database/schema";
 import type { Route } from "./+types/tags.$id";
 
-export async function loader({ params, context, request }: Route.LoaderArgs) {
-  await context.assertLoggedInUser({ context, request });
-
-  // Get the current user to check if they're an admin
-  const user = await context.getCurrentUser({ request, context });
-  const isAdmin = user?.isAdmin || false;
-
+export async function loader({ params, context }: Route.LoaderArgs) {
   const tagId = Number.parseInt(params.id);
 
   // Make sure we have a valid numeric ID
@@ -85,7 +78,6 @@ export async function loader({ params, context, request }: Route.LoaderArgs) {
       patterns,
       recentTransactions,
       error: null,
-      isAdmin,
     };
   } catch (error) {
     // Only catch non-Response errors
@@ -97,15 +89,7 @@ export async function loader({ params, context, request }: Route.LoaderArgs) {
   }
 }
 
-export async function action({ request, context, params }: Route.ActionArgs) {
-  await context.assertLoggedInUser({ context, request });
-
-  // Check if the user is an admin
-  const user = await context.getCurrentUser({ request, context });
-  if (!user?.isAdmin) {
-    return redirect("/unauthorized");
-  }
-
+export async function action({ params, context, request }: Route.ActionArgs) {
   const id = parseInt(params.id || "0");
   if (!id) {
     return { success: false, error: "Invalid tag ID" };
@@ -164,7 +148,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 }
 
 export default function TagDetailsPage() {
-  const { tag, allTags, patterns, recentTransactions, error, isAdmin } =
+  const { tag, allTags, patterns, recentTransactions, error } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -173,13 +157,13 @@ export default function TagDetailsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Create a single fetcher instance
-  const fetcher = useFetcher();
+  const fetcher: any = useFetcher();
 
   useEffect(() => {
     if (
       fetcher.formAction?.includes("/patterns") &&
       fetcher.state === "idle" &&
-      fetcher.data
+      fetcher.data !== undefined
     ) {
       console.log("Pattern fetcher state:", fetcher.state, fetcher.data);
     }
@@ -249,41 +233,18 @@ export default function TagDetailsPage() {
           )}
         </div>
         <div className="join mt-4 md:mt-0">
-          {isAdmin && (
-            <>
-              <button
-                className="btn join-item"
-                onClick={() => setIsEditModalOpen(true)}
-              >
-                Edit Tag
-              </button>
-
-              <button
-                onClick={() => setIsPatternModalOpen(true)}
-                className="btn btn-primary join-item"
-              >
-                Add Pattern
-              </button>
-              <fetcher.Form
-                method="post"
-                className="inline"
-                onSubmit={(e) => {
-                  if (
-                    !confirm(
-                      "Are you sure you want to delete this tag? This will remove the tag from all transactions."
-                    )
-                  ) {
-                    e.preventDefault();
-                  }
-                }}
-              >
-                <input type="hidden" name="_method" value="delete" />
-                <button type="submit" className="btn btn-error join-item">
-                  Delete
-                </button>
-              </fetcher.Form>
-            </>
-          )}
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="btn btn-primary join-item"
+          >
+            Edit Tag
+          </button>
+          <button
+            onClick={() => setIsPatternModalOpen(true)}
+            className="btn join-item"
+          >
+            Add Pattern
+          </button>
         </div>
       </div>
 
@@ -389,14 +350,6 @@ export default function TagDetailsPage() {
           <div className="card-body">
             <div className="flex justify-between items-center mb-4">
               <h2 className="card-title">Recognition Patterns</h2>
-              {isAdmin && (
-                <button
-                  onClick={() => setIsPatternModalOpen(true)}
-                  className="btn btn-primary btn-sm"
-                >
-                  Add Recognition Pattern
-                </button>
-              )}
             </div>
 
             {patterns.length === 0 ? (
@@ -430,62 +383,58 @@ export default function TagDetailsPage() {
                           )}
                         </td>
                         <td className="flex gap-2">
-                          {isAdmin && (
-                            <>
-                              <fetcher.Form
-                                method="post"
-                                action={`/tags/${tag.id}/patterns`}
-                                className="inline"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="intent"
-                                  value="toggle"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="patternId"
-                                  value={pattern.id}
-                                />
-                                <button type="submit" className="btn btn-sm">
-                                  {pattern.is_active
-                                    ? "Deactivate"
-                                    : "Activate"}
-                                </button>
-                              </fetcher.Form>
-                              <fetcher.Form
-                                method="post"
-                                action={`/tags/${tag.id}/patterns`}
-                                className="inline"
-                                onSubmit={(e) => {
-                                  if (
-                                    !confirm(
-                                      "Are you sure you want to delete this pattern?"
-                                    )
-                                  ) {
-                                    e.preventDefault();
-                                  }
-                                }}
-                              >
-                                <input
-                                  type="hidden"
-                                  name="intent"
-                                  value="delete"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="patternId"
-                                  value={pattern.id}
-                                />
-                                <button
-                                  type="submit"
-                                  className="btn btn-sm btn-error"
-                                >
-                                  Delete
-                                </button>
-                              </fetcher.Form>
-                            </>
-                          )}
+                          <fetcher.Form
+                            method="post"
+                            action={`/tags/${tag.id}/patterns`}
+                            className="inline"
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="toggle"
+                            />
+                            <input
+                              type="hidden"
+                              name="patternId"
+                              value={pattern.id}
+                            />
+                            <button type="submit" className="btn btn-sm">
+                              {pattern.is_active
+                                ? "Deactivate"
+                                : "Activate"}
+                            </button>
+                          </fetcher.Form>
+                          <fetcher.Form
+                            method="post"
+                            action={`/tags/${tag.id}/patterns`}
+                            className="inline"
+                            onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
+                              if (
+                                !confirm(
+                                  "Are you sure you want to delete this pattern?"
+                                )
+                              ) {
+                                e.preventDefault();
+                              }
+                            }}
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="delete"
+                            />
+                            <input
+                              type="hidden"
+                              name="patternId"
+                              value={pattern.id}
+                            />
+                            <button
+                              type="submit"
+                              className="btn btn-sm btn-error"
+                            >
+                              Delete
+                            </button>
+                          </fetcher.Form>
                         </td>
                       </tr>
                     ))}

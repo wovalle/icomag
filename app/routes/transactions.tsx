@@ -1,10 +1,9 @@
 import { useState } from "react";
 import {
-  Link,
-  redirect,
-  useFetcher,
-  useLoaderData,
-  useSearchParams,
+    Link,
+    useFetcher,
+    useLoaderData,
+    useSearchParams
 } from "react-router";
 import AddTransactionModal from "../components/AddTransactionModal";
 import TransactionFilters from "../components/TransactionFilters";
@@ -13,15 +12,6 @@ import { TransactionService, formatters } from "../services/transactionService";
 import type { Route } from "./+types/transactions";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await context.assertLoggedInUser({ context, request });
-
-  // Check if the user is authenticated using Clerk's getAuth
-  const user = await context.getCurrentUser({ request, context });
-
-  if (!user) {
-    return redirect("/unauthorized");
-  }
-
   try {
     const transactionService = new TransactionService(context.db);
 
@@ -72,7 +62,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         noOwner,
         noTags,
       },
-      isAdmin: user.isAdmin,
+      isAdmin: true, // TODO: Replace with your new auth system
       error:
         transactionsResult.error ||
         ownersResult.error ||
@@ -108,19 +98,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  await context.assertLoggedInUser({ context, request });
-  // Check if the user is an admin using Clerk's getAuth
-  const user = await context.getCurrentUser({ context, request });
-
-  if (!user) {
-    return redirect("/unauthorized");
-  }
-
-  // Check if the user is an admin
-  if (!user.isAdmin) {
-    return redirect("/unauthorized");
-  }
-
   const transactionService = new TransactionService(context.db);
   const formData = await request.formData();
   const intent = formData.get("intent");

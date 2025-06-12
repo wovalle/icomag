@@ -1,12 +1,10 @@
-import { ClerkProvider } from "@clerk/react-router";
-import { rootAuthLoader } from "@clerk/react-router/ssr.server";
 import {
-  Links,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
-  isRouteErrorResponse,
+    Links,
+    Meta,
+    Outlet,
+    Scripts,
+    ScrollRestoration,
+    isRouteErrorResponse,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -14,7 +12,7 @@ import "./app.css";
 import { Menu } from "./components/Menu";
 
 export async function loader(args: Route.LoaderArgs) {
-  return rootAuthLoader(args);
+  return {};
 }
 
 export const links: Route.LinksFunction = () => [
@@ -50,18 +48,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   return (
-    <ClerkProvider
-      loaderData={loaderData}
-      signUpFallbackRedirectUrl="/"
-      signInFallbackRedirectUrl="/"
-    >
-      <div className="min-h-screen">
-        <Menu />
-        <main className="container mx-auto">
-          <Outlet />
-        </main>
-      </div>
-    </ClerkProvider>
+    <div className="min-h-screen">
+      <Menu />
+      <main className="container mx-auto">
+        <Outlet />
+      </main>
+    </div>
   );
 }
 

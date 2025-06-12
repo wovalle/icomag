@@ -1,30 +1,24 @@
 import { useState } from "react";
-import { Form, Link, redirect, useLoaderData } from "react-router";
+import { Form, Link, useLoaderData } from "react-router";
 
 import { owners } from "../../database/schema";
 import type { Route } from "./+types/owners";
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  await context.assertLoggedInUser({ context, request });
-
-  // Get the current user to check if they're an admin
-  const user = await context.getCurrentUser({ request, context });
-  const isAdmin = user?.isAdmin || false;
-
+export async function loader({ request, context }: Route.LoaderArgs) {
   try {
     const ownersList = await context.db.query.owners.findMany({
       orderBy: (owners, { desc }) => [desc(owners.created_at)],
     });
 
-    return { owners: ownersList, error: null, isAdmin };
+    return { owners: ownersList, error: null };
   } catch (error) {
     console.error("Error loading owners:", error);
-    return { owners: [], error: "Failed to load owners", isAdmin };
+    return { owners: [], error: "Failed to load owners" };
   }
 }
 
 export default function OwnersIndex() {
-  const { owners, error, isAdmin } = useLoaderData<typeof loader>();
+  const { owners, error } = useLoaderData<typeof loader>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -37,14 +31,12 @@ export default function OwnersIndex() {
             Manage apartment owners and their bank accounts
           </p>
         </div>
-        {isAdmin && (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn btn-primary"
-          >
-            Add Owner
-          </button>
-        )}
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="btn btn-primary"
+        >
+          Add Owner
+        </button>
       </div>
       {(error || actionError) && (
         <div role="alert" className="alert alert-error mb-4">
@@ -95,14 +87,12 @@ export default function OwnersIndex() {
                       >
                         View
                       </Link>
-                      {isAdmin && (
-                        <Link
-                          to={`/owners/${owner.id}/edit`}
-                          className="btn btn-sm join-item"
-                        >
-                          Edit
-                        </Link>
-                      )}
+                      <Link
+                        to={`/owners/${owner.id}/edit`}
+                        className="btn btn-sm join-item"
+                      >
+                        Edit
+                      </Link>
                     </div>
                   </td>
                 </tr>
@@ -112,7 +102,7 @@ export default function OwnersIndex() {
         </table>
       </div>
       {/* Add Owner Modal */}
-      {isAdmin && isModalOpen && (
+      {isModalOpen && (
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Add New Owner</h3>
@@ -191,19 +181,11 @@ export default function OwnersIndex() {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  await context.assertLoggedInUser({ context, request });
-
-  // Check if the user is an admin
-  const user = await context.getCurrentUser({ request, context });
-  if (!user?.isAdmin) {
-    return redirect("/unauthorized");
-  }
-
   const formData = await request.formData();
-  const name = formData.get("name");
-  const apartment_id = formData.get("apartment_id");
-  const email = formData.get("email") || null;
-  const phone = formData.get("phone") || null;
+  const name = formData.get("name") as string;
+  const apartment_id = formData.get("apartment_id") as string;
+  const email = formData.get("email") as string | null;
+  const phone = formData.get("phone") as string | null;
 
   try {
     await context.db.insert(owners).values({
