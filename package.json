@@ -16,7 +16,7 @@
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@react-router/fs-routes": "^7.5.3",
+    "@react-router/fs-routes": "^7.6.2",
     "aws4fetch": "^1.0.20",
     "daisyui": "^5.0.35",
     "drizzle-orm": "~0.36.3",
@@ -24,12 +24,13 @@
     "luxon": "^3.6.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router": "^7.5.3"
+    "react-router": "^7.6.2",
+    "resend": "^4.5.2"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.0.12",
-    "@cloudflare/workers-types": "^4.20250429.0",
-    "@react-router/dev": "^7.5.3",
+    "@cloudflare/vite-plugin": "^1.5.1",
+    "@cloudflare/workers-types": "^4.20250612.0",
+    "@react-router/dev": "^7.6.2",
     "@tailwindcss/vite": "^4.1.4",
     "@types/luxon": "^3.6.2",
     "@types/node": "^20",
