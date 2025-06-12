@@ -1,4 +1,11 @@
-import { eq, SQL, sql } from "drizzle-orm";
+import {
+  asc,
+  desc,
+  eq,
+  SQL,
+  sql,
+  type ExtractTablesWithRelations,
+} from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type {
   SQLiteColumn,
@@ -18,7 +25,12 @@ export type WhereCondition = SQL | SQL[];
 /**
  * Repository transaction type
  */
-export type Transaction = SQLiteTransaction<typeof schema>;
+export type Transaction = SQLiteTransaction<
+  "async",
+  D1Result<unknown>,
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
 
 /**
  * Database error class for handling database-specific errors
@@ -84,7 +96,7 @@ export class DrizzleRepository<T extends SQLiteTable> {
       }
 
       // Fallback to basic query without relations
-      let queryBuilder = dbInstance.select().from(this.table);
+      let queryBuilder = dbInstance.select().from(this.table).$dynamic();
 
       if (where) {
         queryBuilder = queryBuilder.where(
@@ -98,12 +110,10 @@ export class DrizzleRepository<T extends SQLiteTable> {
       }
 
       if (orderBy && orderBy.length > 0) {
-        orderBy.forEach(({ column, direction }) => {
-          queryBuilder =
-            direction === "asc"
-              ? queryBuilder.orderBy(column)
-              : queryBuilder.orderBy(column, { direction: "desc" });
+        const orderByC = orderBy.map(({ column, direction }) => {
+          return direction === "asc" ? asc(column) : desc(column);
         });
+        queryBuilder = queryBuilder.orderBy(...orderByC);
       }
 
       return queryBuilder as unknown as Promise<TReturn[]>;

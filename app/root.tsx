@@ -57,7 +57,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
     >
       <div className="min-h-screen">
         <Menu />
-        <main className="container mx-auto px-4">
+        <main className="container mx-auto">
           <Outlet />
         </main>
       </div>

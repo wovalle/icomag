@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { Form, redirect } from "react-router";
 
 import { BalanceService } from "~/services/balanceService";
@@ -35,17 +36,17 @@ export const action = async ({ request, context }: Route.ActionArgs) => {
 
 export default function BalancePage({ loaderData }: Route.ComponentProps) {
   const { currentBalance } = loaderData;
+  const currentDate = DateTime.now()
+    .setZone("America/Santo_Domingo")
+    .toFormat("yyyy-MM-dd'T'HH:mm");
 
-  // Default date to today in ISO format (YYYY-MM-DD)
-  const today = new Date();
-  const defaultDate = today.toISOString().split("T")[0];
 
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">Current Balance</h1>
 
       {currentBalance && (
-        <div className="alert alert-info mb-6">
+        <div className="alert alert-info mb-6 text-white">
           <div>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -102,13 +103,9 @@ export default function BalancePage({ loaderData }: Route.ComponentProps) {
                 <span className="label-text">Balance Date</span>
               </label>
               <input
-                type="date"
+                type="datetime-local"
                 name="date"
-                defaultValue={
-                  currentBalance
-                    ? new Date(currentBalance.date).toISOString().split("T")[0]
-                    : defaultDate
-                }
+                defaultValue={currentDate}
                 className="input input-bordered"
                 required
               />

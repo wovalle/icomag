@@ -5,7 +5,7 @@ import { formatCurrency } from "~/utils";
 
 import type { Route } from "./+types/_index";
 
-export const loader = async ({ request, context }: Route.LoaderArgs) => {
+export const loader = async ({ context }: Route.LoaderArgs) => {
   const balanceService = new BalanceService(context.dbRepository);
   const balanceInfo = await balanceService.getEstimatedBalance();
   return { balanceInfo };
@@ -28,7 +28,7 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
 
           {balanceInfo.estimatedBalance !== null ? (
             <>
-              <div className="stats shadow mt-2">
+              <div className="stats stats-vertical lg:stats-horizontal shadow mt-2">
                 <div className="stat">
                   <div className="stat-title">Estimated Balance</div>
                   <div className="stat-value text-secondary">

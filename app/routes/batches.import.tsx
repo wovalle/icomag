@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { useState } from "react";
-import { Form, Link, redirect, useLoaderData } from "react-router";
+import { Form, redirect, useLoaderData } from "react-router";
 import { transactionBatches, transactions } from "../../database/schema";
 import { parsePopularTransactionsFile } from "../services/bankFileParser";
 import type { Route } from "./+types/batches.import";
@@ -201,11 +201,6 @@ export default function ImportBatchPage() {
             Upload a CSV file from your bank to import transactions
           </p>
         </div>
-        <div>
-          <Link to="/batches" className="btn btn-outline">
-            Back to Batches
-          </Link>
-        </div>
       </div>
 
       {error && (
@@ -228,7 +223,6 @@ export default function ImportBatchPage() {
               <input
                 type="file"
                 name="csvFile"
-                accept=".csv"
                 className="file-input file-input-bordered w-full max-w-xs mb-2"
                 onChange={handleFileChange}
                 required

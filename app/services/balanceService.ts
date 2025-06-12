@@ -1,5 +1,5 @@
 import { and, gte } from "drizzle-orm";
-import { transactions } from "../../database/schema";
+import { transactionBatches, transactions } from "../../database/schema";
 import { RepositoryFactory } from "../repositories/RepositoryFactory";
 
 const CURRENT_BALANCE_KEY = "current_balance";
@@ -54,15 +54,16 @@ export class BalanceService {
       this.repositoryFactory.getTransactionBatchesRepository();
 
     const batches = await batchesRepo.findMany({
-      orderBy: { column: "processed_at", direction: "desc" },
+      orderBy: [{ column: transactionBatches.processed_at, direction: "desc" }],
       pagination: { limit: 1 },
     });
 
-    if (!batches || batches.length === 0) {
+    const lastBatch = batches[0];
+
+    if (!batches || !lastBatch) {
       return null;
     }
 
-    const lastBatch = batches[0];
     return {
       id: lastBatch.id,
       filename: lastBatch.original_filename,
@@ -100,10 +101,10 @@ export class BalanceService {
     // Calculate the sum of all transactions since the balance date
     let transactionSum = 0;
     for (const transaction of recentTransactions) {
-      if (transaction.type === "debit") {
+      if (transaction.type === "credit") {
         // Money coming in
         transactionSum += transaction.amount;
-      } else if (transaction.type === "credit") {
+      } else if (transaction.type === "debit") {
         // Money going out
         transactionSum -= transaction.amount;
       }

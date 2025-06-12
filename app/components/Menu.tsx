@@ -13,7 +13,7 @@ export function Menu() {
   };
 
   return (
-    <div className="navbar bg-base-200 mb-6">
+    <div className="navbar mb-6">
       <div className="navbar-start">
         <div className="dropdown">
           <div tabIndex={0} role="button" className="btn btn-ghost lg:hidden">
@@ -34,7 +34,7 @@ export function Menu() {
           </div>
           <ul
             tabIndex={0}
-            className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52"
+            className="menu dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box text-lg"
           >
             <li>
               <Link to="/" className={isActive("/")}>
@@ -69,9 +69,10 @@ export function Menu() {
           </ul>
         </div>
         <Link to="/" className="btn btn-ghost text-xl">
-          iComag
+          <img src="/logo-rect.png" alt="Icona Management" className="h-10" />
         </Link>
       </div>
+
       <div className="navbar-center hidden lg:flex">
         <ul className="menu menu-horizontal px-1">
           <li>

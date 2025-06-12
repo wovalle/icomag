@@ -5,7 +5,7 @@ export default function UnauthorizedPage() {
   const { isSignedIn } = useUser();
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh]">
+    <div className="flex flex-col items-center ">
       <div className="card card-bordered bg-base-100 w-full max-w-md shadow-lg">
         <div className="card-body">
           <h2 className="card-title text-error">Access Denied</h2>

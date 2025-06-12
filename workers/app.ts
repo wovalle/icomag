@@ -1,7 +1,11 @@
 import { createClerkClient } from "@clerk/react-router/api.server";
 import { getAuth } from "@clerk/react-router/ssr.server";
-import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
-import { createRequestHandler } from "react-router";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+import {
+  createRequestHandler,
+  redirect,
+  type LoaderFunctionArgs,
+} from "react-router";
 import {
   RepositoryFactory,
   createRepositoryFactory,
@@ -23,15 +27,15 @@ declare module "react-router" {
     db: DrizzleD1Database<typeof schema>;
     dbRepository: RepositoryFactory;
     attachmentService: AttachmentService;
-    getCurrentUser: (loaderArgs: any) => Promise<{
+    getCurrentUser: (loaderArgs: LoaderFunctionArgs) => Promise<{
       email: string | null;
       isAdmin: boolean;
       id: string;
       firstName: string | null;
       lastName: string | null;
     }>;
-    assertAdminUser: (loaderArgs: any) => Promise<void>;
-    assertLoggedInUser: (loaderArgs: any) => Promise<void>;
+    assertAdminUser: (loaderArgs: LoaderFunctionArgs) => Promise<void>;
+    assertLoggedInUser: (loaderArgs: LoaderFunctionArgs) => Promise<void>;
   }
 }
 
@@ -48,7 +52,7 @@ export default {
     const db = drizzle(env.DB, { schema });
     const dbRepository = createRepositoryFactory(db);
 
-    const getCurrentUser = async (args: any) => {
+    const getCurrentUser = async (args: LoaderFunctionArgs) => {
       const auth = await getAuth(args);
 
       const user = await createClerkClient({
@@ -66,7 +70,7 @@ export default {
       };
     };
 
-    const assertAdminUser = async (args: any) => {
+    const assertAdminUser = async (args: LoaderFunctionArgs) => {
       let result: Response | null = null;
 
       try {
@@ -98,23 +102,20 @@ export default {
       }
     };
 
-    const assertLoggedInUser = async (args: any) => {
+    const assertLoggedInUser = async (args: LoaderFunctionArgs) => {
       let result: Response | null = null;
+      const currentUrl = new URL(args.request.url);
+      const unauthorizedUrl = `/unauthorized?back=${currentUrl.pathname}`;
+
       try {
         const user = await getCurrentUser(args);
 
         if (!user.email) {
-          result = new Response("Unauthorized: You must be logged in", {
-            status: 401,
-            headers: { "Content-Type": "text/plain" },
-          });
+          result = redirect(unauthorizedUrl);
         }
       } catch (error) {
         console.error("Error getting current user:", error);
-        result = new Response("Unauthorized: You must be logged in", {
-          status: 401,
-          headers: { "Content-Type": "text/plain" },
-        });
+        result = redirect(unauthorizedUrl);
       }
 
       if (result) {
