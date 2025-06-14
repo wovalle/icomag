@@ -1,7 +1,20 @@
+import { LogOut } from "lucide-react";
 import { Link, useLocation } from "react-router";
+import { authClient } from "~/lib/auth-client";
+import { useCurrentUser } from "../hooks";
 
 export function Menu() {
   const location = useLocation();
+  const user = useCurrentUser();
+
+  const handleSignOut = async () => {
+    try {
+      await authClient.signOut();
+      window.location.href = "/auth/signin";
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
+  };
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -119,7 +132,21 @@ export function Menu() {
         </ul>
       </div>
       <div className="navbar-end">
-        {/* Remove the sign-in link */}
+        <div className="flex items-center gap-4">
+          {user && (
+            <>
+              <span className="hidden sm:inline text-sm">
+                Welcome, {user.name.split(" ")[0]}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="btn btn-outline btn-sm"
+              >
+                <LogOut size={16} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

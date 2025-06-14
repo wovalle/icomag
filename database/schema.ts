@@ -7,6 +7,8 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
+export { account, session, user, verification } from "./auth-schema";
+
 // Owners table to track all apartment owners
 export const owners = sqliteTable("owners", {
   id: integer().primaryKey({ autoIncrement: true }),

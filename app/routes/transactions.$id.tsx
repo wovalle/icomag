@@ -17,8 +17,6 @@ import { formatters } from "../services/transactionService";
 import type { Route } from "./+types/transactions.$id";
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  await context.assertLoggedInUser({ request, context });
-
   const id = parseInt(params.id || "0");
 
   if (!id) {
@@ -33,7 +31,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 
   try {
     // Get current user info
-    const userInfo = await context.getCurrentUser({ request, context });
+    const userInfo = await context.getSession();
 
     // Fetch transaction with owner
     const transaction = await context.db.query.transactions.findFirst({
@@ -49,7 +47,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
         transaction: null,
         owners: [],
         allTags: [],
-        isAdmin: userInfo.isAdmin,
+        isAdmin: userInfo?.isAdmin,
         error: "Transaction not found",
       };
     }
@@ -85,7 +83,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       },
       owners: ownersList,
       allTags: allTagsList,
-      isAdmin: userInfo.isAdmin,
+      isAdmin: userInfo?.isAdmin,
       error: null,
     };
   } catch (error) {
@@ -101,8 +99,6 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
-  await context.assertAdminUser({ request, context });
-
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = parseInt(params.id || "0");

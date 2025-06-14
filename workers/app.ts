@@ -1,32 +1,20 @@
+import type { User } from "better-auth";
+import { eq } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
-import {
-  createRequestHandler
-} from "react-router";
+import { createRequestHandler } from "react-router";
+import { getAuth } from "../app/lib/auth.server";
 import {
   RepositoryFactory,
   createRepositoryFactory,
 } from "../app/repositories/RepositoryFactory";
 import { AttachmentService } from "../app/services/attachmentService";
+import { ADMIN_EMAILS } from "../app/static";
+import type { Owner } from "../app/types";
 import * as schema from "../database/schema";
 
 interface Env extends Cloudflare.Env {
   R2: R2Bucket;
 }
-
-declare module "react-router" {
-  export interface AppLoadContext {
-    cloudflare: {
-      env: Env;
-      ctx: ExecutionContext;
-    };
-    db: DrizzleD1Database<typeof schema>;
-    dbRepository: RepositoryFactory;
-    attachmentService: AttachmentService;
-  }
-}
-
-// List of admin emails
-const ADMIN_EMAILS = ["hey@willy.im", "eliascaseres@gmail.com"];
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
@@ -37,6 +25,11 @@ export default {
   async fetch(request, env, ctx) {
     const db = drizzle(env.DB, { schema });
     const dbRepository = createRepositoryFactory(db);
+    const auth = getAuth({
+      env,
+      db,
+      dbRepository,
+    });
 
     const attachmentService = new AttachmentService(db, {
       accessKeyId: env.R2_ACCESS_KEY_ID,
@@ -46,10 +39,50 @@ export default {
     });
 
     return requestHandler(request, {
+      env,
       cloudflare: { env, ctx },
       db,
       dbRepository,
       attachmentService,
+      auth,
+      getSession: async () => {
+        const session = await auth.api.getSession({
+          headers: request.headers,
+        });
+
+        if (!session) {
+          return null;
+        }
+
+        const user = (await dbRepository.getOwnersRepository().findOne({
+          where: eq(schema.owners.email, session.user.email),
+        })) as Owner;
+
+        return {
+          sessionUser: session.user,
+          currentUser: user,
+          isAdmin: ADMIN_EMAILS.includes(session.user.email ?? ""),
+        };
+      },
     });
   },
 } satisfies ExportedHandler<Env>;
+
+declare module "react-router" {
+  export interface AppLoadContext {
+    env: Env;
+    cloudflare: {
+      env: Env;
+      ctx: ExecutionContext;
+    };
+    db: DrizzleD1Database<typeof schema>;
+    dbRepository: RepositoryFactory;
+    attachmentService: AttachmentService;
+    auth: ReturnType<typeof getAuth>;
+    getSession: () => Promise<{
+      sessionUser: User;
+      currentUser: Owner;
+      isAdmin: boolean;
+    } | null>;
+  }
+}

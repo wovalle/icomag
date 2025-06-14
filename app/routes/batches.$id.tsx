@@ -10,9 +10,7 @@ type BatchDetailLoaderData = {
   error: string | null;
 };
 
-export async function loader({ context, params, request }: Route.LoaderArgs) {
-  await context.assertLoggedInUser({ context, request, params });
-
+export async function loader({ context, params }: Route.LoaderArgs) {
   if (!params.id) {
     return {
       batch: null,
@@ -70,8 +68,6 @@ export async function loader({ context, params, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, params, request }: Route.ActionArgs) {
-  await context.assertAdminUser({ context, request, params });
-
   if (!params.id) {
     return { success: false, error: "Batch ID is required" };
   }

@@ -5,14 +5,45 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
+  redirect,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 import { Menu } from "./components/Menu";
 
-export async function loader(args: Route.LoaderArgs) {
-  return {};
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+  const session = await context.getSession();
+
+  // Skip authentication check for auth-related routes
+  if (pathname.startsWith("/auth") || pathname.startsWith("/api/auth")) {
+    return {
+      currentUser: null,
+      isAdmin: false,
+    };
+  }
+
+  try {
+    // If no session and not on auth routes, redirect to signin
+    if (!session || !session.currentUser) {
+      throw redirect("/auth/signin");
+    }
+
+    return {
+      currentUser: session.currentUser,
+      isAdmin: session.isAdmin,
+    };
+  } catch (error) {
+    // If it's already a redirect, throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
+    // For other errors, redirect to signin
+    throw redirect("/auth/signin");
+  }
 }
 
 export const links: Route.LinksFunction = () => [

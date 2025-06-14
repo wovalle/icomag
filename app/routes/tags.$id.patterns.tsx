@@ -4,8 +4,6 @@ import { tagPatterns, transactionToTags } from "../../database/schema";
 import type { Route } from "./+types/tags.$id";
 
 export async function action({ request, params, context }: Route.ActionArgs) {
-  await context.assertAdminUser({ context, request });
-
   console.log("Action triggered for tag patterns", params.id);
 
   const tagId = parseInt(params.id);

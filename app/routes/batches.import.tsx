@@ -10,14 +10,10 @@ type ImportLoaderData = {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  await context.assertAdminUser({ context, request });
-
   return { error: null };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  await context.assertAdminUser({ context, request });
-
   const formData = await request.formData();
   const file = formData.get("csvFile");
   const usePatternMatching = formData.get("usePatternMatching") === "on";

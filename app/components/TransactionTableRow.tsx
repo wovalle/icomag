@@ -1,3 +1,4 @@
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import type { Owner, Tag, Transaction } from "../types";
@@ -309,9 +310,9 @@ export default function TransactionTableRow({
       </td>
       <td>
         {transaction.type === "credit" ? (
-          <div className="badge badge-success">Money In</div>
+          <TrendingUp size={16} className="text-success" />
         ) : (
-          <div className="badge badge-error">Money Out</div>
+          <TrendingDown size={16} className="text-error" />
         )}
       </td>
       <td>

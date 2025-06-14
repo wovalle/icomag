@@ -1,9 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "icomag",
-  "compatibility_date": "2025-04-04",
+  "compatibility_date": "2025-06-04",
   "main": "./workers/app.ts",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat_v2"],
   "observability": {
     "enabled": true,
     "logs": {

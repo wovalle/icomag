@@ -4,13 +4,7 @@ import { TransactionService } from "../services/transactionService";
 
 import type { Route } from "./+types/transactions.$id.attachment.$attachmentId";
 
-export const loader = async ({
-  params,
-  context,
-  request,
-}: Route.LoaderArgs) => {
-  await context.assertLoggedInUser({ context, request });
-
+export const loader = async ({ params, context }: Route.LoaderArgs) => {
   const { id, attachmentId } = params;
 
   if (!id || !attachmentId) {
