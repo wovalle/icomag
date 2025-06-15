@@ -9,6 +9,7 @@ import type { Route } from "./+types/transactions";
 export async function loader({ request, context }: Route.LoaderArgs) {
   try {
     const transactionService = new TransactionService(context.db);
+    const session = await context.getSession();
 
     // Get filter params from URL
     const url = new URL(request.url);
@@ -51,17 +52,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       owners: ownersResult.owners || [],
       tags: tagsResult.tags || [],
       pagination: transactionsResult.pagination,
-      filters: {
-        ownerId: rawOwnerId,
-        transactionType,
-        tagId: rawTagId,
-        search: searchTerm,
-        startDate,
-        endDate,
-        noOwner,
-        noTags,
-      },
-      isAdmin: true, // TODO: Replace with your new auth system
+      isAdmin: session?.isAdmin ?? false,
       error:
         transactionsResult.error ||
         ownersResult.error ||
@@ -79,16 +70,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         pageCount: 0,
         currentPage: 1,
         limit: 20,
-      },
-      filters: {
-        ownerId: null,
-        transactionType: null,
-        tagId: null,
-        search: null,
-        startDate: null,
-        endDate: null,
-        noOwner: null,
-        noTags: null,
       },
       isAdmin: false,
       error: "Failed to load transactions",
@@ -202,57 +183,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function TransactionsPage() {
-  const { transactions, owners, tags, pagination, filters, isAdmin, error } =
+  const { transactions, owners, tags, pagination, isAdmin, error } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const fetcher = useFetcher<typeof action>();
-
-  // Handle filter application - simplified to just update URL params
-  const applyFilters = (newFilters: {
-    type: string;
-    ownerId: string;
-    tagId: string;
-    search: string;
-    startDate: string;
-    endDate: string;
-    noOwner: boolean;
-    noTags: boolean;
-  }) => {
-    const newParams = new URLSearchParams();
-
-    // Only add parameters that have values
-    if (newFilters.type) newParams.append("type", newFilters.type);
-    if (newFilters.search) newParams.append("search", newFilters.search);
-    if (newFilters.startDate)
-      newParams.append("startDate", newFilters.startDate);
-    if (newFilters.endDate) newParams.append("endDate", newFilters.endDate);
-
-    // Handle owner filter
-    if (newFilters.noOwner) {
-      newParams.append("ownerId", "no-owner");
-    } else if (newFilters.ownerId) {
-      newParams.append("ownerId", newFilters.ownerId);
-    }
-
-    // Handle tag filter
-    if (newFilters.noTags) {
-      newParams.append("tagId", "no-tags");
-    } else if (newFilters.tagId) {
-      newParams.append("tagId", newFilters.tagId);
-    }
-
-    // Reset to first page when filters change
-    newParams.append("page", "1");
-
-    setSearchParams(newParams, { replace: true });
-  };
-
-  // Handle filter reset
-  const resetFilters = () => {
-    setSearchParams({}, { replace: true });
-  };
 
   // Handle pagination
   const goToPage = (page: number) => {
@@ -377,13 +313,7 @@ export default function TransactionsPage() {
       )}
 
       {/* Filter Section */}
-      <TransactionFilters
-        owners={owners}
-        tags={tags}
-        initialFilters={filters}
-        onApplyFilters={applyFilters}
-        onResetFilters={resetFilters}
-      />
+      <TransactionFilters owners={owners} tags={tags} />
 
       {/* Transactions Table */}
       <TransactionTable
