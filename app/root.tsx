@@ -42,7 +42,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }
 
     // For other errors, redirect to signin
-    throw redirect("/auth/signin");
+    // throw redirect("/auth/signin");
   }
 }
 

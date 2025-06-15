@@ -1,4 +1,4 @@
-import { and, gte } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { transactionBatches, transactions } from "../../database/schema";
 import { RepositoryFactory } from "../repositories/RepositoryFactory";
 
@@ -94,7 +94,11 @@ export class BalanceService {
     // Get all transactions since the balance date
     const recentTransactions = await transactionsRepo.findMany({
       where: and(
-        gte(transactions.date, Math.floor(currentBalance.date.getTime() / 1000))
+        gte(
+          transactions.date,
+          Math.floor(currentBalance.date.getTime() / 1000)
+        ),
+        eq(transactions.is_duplicate, 0)
       ),
     });
 

@@ -151,11 +151,14 @@ export async function parsePopularTransactionsFile(
           transaction["Fecha Posteo"] &&
           transaction["Monto Transacción"] &&
           (transaction["Descripción Corta"]?.includes("Débito") ||
-            transaction["Descripción Corta"]?.includes("Crédito"))
+            transaction["Descripción Corta"]?.includes("Crédito") ||
+            transaction["Descripción"]?.includes("PAGO IMPUESTO"))
       )
       .map((transaction) => {
         // Determine if it's a debit or credit transaction
-        const isDebit = transaction["Descripción Corta"]?.includes("Débito");
+        const isDebit =
+          transaction["Descripción Corta"]?.includes("Débito") ||
+          transaction["Descripción"]?.includes("PAGO IMPUESTO");
         const type = isDebit ? "debit" : "credit";
 
         // Parse amount (removing commas and converting to number)
