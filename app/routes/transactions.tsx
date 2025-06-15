@@ -78,6 +78,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin for any data modification action
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to modify transactions",
+    };
+  }
+
   const transactionService = new TransactionService(context.db);
   const formData = await request.formData();
   const intent = formData.get("intent");

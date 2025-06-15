@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 
+import { useIsAdmin } from "~/hooks";
 import { BalanceService } from "~/services/balanceService";
 import { formatCurrency } from "~/utils";
 
@@ -8,11 +9,17 @@ import type { Route } from "./+types/_index";
 export const loader = async ({ context }: Route.LoaderArgs) => {
   const balanceService = new BalanceService(context.dbRepository);
   const balanceInfo = await balanceService.getEstimatedBalance();
-  return { balanceInfo };
+
+  const session = await context.getSession();
+  return {
+    balanceInfo,
+    isAdmin: session?.isAdmin ?? false,
+  };
 };
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
   const { balanceInfo } = loaderData;
+  const isAdmin = useIsAdmin();
   const balance = balanceInfo.currentBalance
     ? formatCurrency(balanceInfo.currentBalance)
     : "N/A";
@@ -100,11 +107,22 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
           )}
 
           <div className="card-actions justify-end mt-4">
-            <Link to="/balance" className="btn btn-primary">
-              {balanceInfo.currentBalance !== null
-                ? "Update Balance"
-                : "Set Balance"}
-            </Link>
+            {isAdmin ? (
+              <Link to="/balance" className="btn btn-primary">
+                {balanceInfo.currentBalance !== null
+                  ? "Update Balance"
+                  : "Set Balance"}
+              </Link>
+            ) : (
+              <button
+                className="btn btn-primary btn-disabled"
+                title="Admin access required"
+              >
+                {balanceInfo.currentBalance !== null
+                  ? "Update Balance"
+                  : "Set Balance"}
+              </button>
+            )}
           </div>
         </div>
       </div>

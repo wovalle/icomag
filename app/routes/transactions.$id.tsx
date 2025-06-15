@@ -99,6 +99,16 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin for any data modification action
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to modify transactions",
+    };
+  }
+
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = parseInt(params.id || "0");
@@ -417,6 +427,26 @@ export default function TransactionDetail() {
         </Link>
         <h1 className="text-2xl font-bold">Transaction Details</h1>
       </div>
+
+      {!isAdmin && (
+        <div className="alert alert-warning mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+          <span>Admin access required to modify transaction details</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card bg-base-100 shadow-xl">

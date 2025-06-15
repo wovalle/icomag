@@ -4,6 +4,16 @@ import { tagPatterns, transactionToTags } from "../../database/schema";
 import type { Route } from "./+types/tags.$id";
 
 export async function action({ request, params, context }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to modify tag patterns",
+    };
+  }
+
   console.log("Action triggered for tag patterns", params.id);
 
   const tagId = parseInt(params.id);

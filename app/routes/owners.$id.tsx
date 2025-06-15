@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import { Form, Link, useActionData, useNavigate } from "react-router";
+import { useIsAdmin } from "~/hooks";
 import type { Route } from "./+types/owners.$id";
 
 import { ownerPatterns, owners, transactions } from "../../database/schema";
@@ -14,6 +15,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   }
 
   try {
+    const session = await context.getSession();
     const owner = await context.db.query.owners.findFirst({
       where: eq(owners.id, ownerId),
     });
@@ -44,6 +46,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       patterns,
       recentTransactions,
       error: null,
+      isAdmin: session?.isAdmin ?? false,
     };
   } catch (error) {
     // Only catch non-Response errors
@@ -57,6 +60,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
 export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
   const { owner, patterns, recentTransactions, error } = loaderData;
+  const isAdmin = useIsAdmin();
   const actionData = useActionData<any>();
   const navigate = useNavigate();
   const [isPatternModalOpen, setIsPatternModalOpen] = useState(false);
@@ -123,14 +127,43 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
           <p className="text-gray-500">Apartment: {owner.apartment_id}</p>
         </div>
         <div className="join mt-4 md:mt-0">
-          <Link to={`/owners/${owner.id}/edit`} className="btn join-item">
-            Edit Owner
-          </Link>
+          {isAdmin ? (
+            <Link to={`/owners/${owner.id}/edit`} className="btn join-item">
+              Edit Owner
+            </Link>
+          ) : (
+            <button
+              className="btn join-item btn-disabled"
+              title="Admin access required"
+            >
+              Edit Owner
+            </button>
+          )}
           <Link to="/owners" className="btn join-item">
             Back to Owners
           </Link>
         </div>
       </div>
+
+      {!isAdmin && (
+        <div className="alert alert-warning mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+          <span>Admin access required to modify owner information</span>
+        </div>
+      )}
 
       {/* Owner Information */}
       <div className="card shadow-md mb-6">
@@ -170,12 +203,21 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
         <div className="card-body">
           <div className="flex justify-between items-center mb-4">
             <h2 className="card-title">Recognition Patterns</h2>
-            <button
-              onClick={() => setIsPatternModalOpen(true)}
-              className="btn btn-primary btn-sm"
-            >
-              Add Recognition Pattern
-            </button>
+            {isAdmin ? (
+              <button
+                onClick={() => setIsPatternModalOpen(true)}
+                className="btn btn-primary btn-sm"
+              >
+                Add Recognition Pattern
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary btn-sm btn-disabled"
+                title="Admin access required"
+              >
+                Add Recognition Pattern
+              </button>
+            )}
           </div>
 
           {patterns.length === 0 ? (
@@ -209,48 +251,75 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                         )}
                       </td>
                       <td className="flex gap-2">
-                        <Form
-                          method="post"
-                          action={`/owners/${owner.id}/patterns`}
-                          className="inline"
-                        >
-                          <input type="hidden" name="intent" value="toggle" />
-                          <input
-                            type="hidden"
-                            name="patternId"
-                            value={pattern.id}
-                          />
-                          <button type="submit" className="btn btn-sm">
-                            {pattern.is_active ? "Deactivate" : "Activate"}
-                          </button>
-                        </Form>
-                        <Form
-                          method="post"
-                          action={`/owners/${owner.id}/patterns`}
-                          className="inline"
-                          onSubmit={(e) => {
-                            if (
-                              !confirm(
-                                "Are you sure you want to delete this pattern?"
-                              )
-                            ) {
-                              e.preventDefault();
-                            }
-                          }}
-                        >
-                          <input type="hidden" name="intent" value="delete" />
-                          <input
-                            type="hidden"
-                            name="patternId"
-                            value={pattern.id}
-                          />
-                          <button
-                            type="submit"
-                            className="btn btn-sm btn-error"
-                          >
-                            Delete
-                          </button>
-                        </Form>
+                        {isAdmin ? (
+                          <>
+                            <Form
+                              method="post"
+                              action={`/owners/${owner.id}/patterns`}
+                              className="inline"
+                            >
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="toggle"
+                              />
+                              <input
+                                type="hidden"
+                                name="patternId"
+                                value={pattern.id}
+                              />
+                              <button type="submit" className="btn btn-sm">
+                                {pattern.is_active ? "Deactivate" : "Activate"}
+                              </button>
+                            </Form>
+                            <Form
+                              method="post"
+                              action={`/owners/${owner.id}/patterns`}
+                              className="inline"
+                              onSubmit={(e) => {
+                                if (
+                                  !confirm(
+                                    "Are you sure you want to delete this pattern?"
+                                  )
+                                ) {
+                                  e.preventDefault();
+                                }
+                              }}
+                            >
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="delete"
+                              />
+                              <input
+                                type="hidden"
+                                name="patternId"
+                                value={pattern.id}
+                              />
+                              <button
+                                type="submit"
+                                className="btn btn-sm btn-error"
+                              >
+                                Delete
+                              </button>
+                            </Form>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className="btn btn-sm btn-disabled"
+                              title="Admin access required"
+                            >
+                              {pattern.is_active ? "Deactivate" : "Activate"}
+                            </button>
+                            <button
+                              className="btn btn-sm btn-error btn-disabled"
+                              title="Admin access required"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -320,7 +389,7 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* Add Recognition Pattern Modal */}
-      {isPatternModalOpen && (
+      {isAdmin && isPatternModalOpen && (
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Add Recognition Pattern</h3>

@@ -5,6 +5,16 @@ import { ownerPatterns, transactions } from "../../database/schema";
 import type { Route } from "./+types/owners.$id";
 
 export async function action({ request, params, context }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to modify owner patterns",
+    };
+  }
+
   const ownerId = parseInt(params.id);
 
   // Make sure we have a valid owner ID

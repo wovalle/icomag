@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { useState } from "react";
 import { Form, Link, useLoaderData, useNavigate } from "react-router";
+import { useIsAdmin } from "~/hooks";
 import type { Route } from "../+types/root";
 import { transactionBatches, transactions } from "../../database/schema";
 
@@ -8,6 +9,7 @@ type BatchDetailLoaderData = {
   batch: any;
   transactions: any[];
   error: string | null;
+  isAdmin: boolean;
 };
 
 export async function loader({ context, params }: Route.LoaderArgs) {
@@ -16,6 +18,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       batch: null,
       transactions: [],
       error: "Batch ID is required",
+      isAdmin: false,
     };
   }
 
@@ -26,10 +29,13 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       batch: null,
       transactions: [],
       error: "Invalid batch ID",
+      isAdmin: false,
     };
   }
 
   try {
+    const session = await context.getSession();
+
     // Load the batch
     const batch = await context.db.query.transactionBatches.findFirst({
       where: eq(transactionBatches.id, batchId),
@@ -40,6 +46,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
         batch: null,
         transactions: [],
         error: `Batch with ID ${batchId} not found`,
+        isAdmin: session?.isAdmin ?? false,
       };
     }
 
@@ -56,6 +63,7 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       batch,
       transactions: batchTransactions,
       error: null,
+      isAdmin: session?.isAdmin ?? false,
     };
   } catch (error) {
     console.error(`Error loading batch ${batchId}:`, error);
@@ -63,11 +71,22 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       batch: null,
       transactions: [],
       error: "Failed to load batch details",
+      isAdmin: false,
     };
   }
 }
 
 export async function action({ context, params, request }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to delete batches",
+    };
+  }
+
   if (!params.id) {
     return { success: false, error: "Batch ID is required" };
   }
@@ -100,12 +119,16 @@ export async function action({ context, params, request }: Route.ActionArgs) {
 
 export default function BatchDetailPage() {
   const { batch, transactions, error } = useLoaderData<BatchDetailLoaderData>();
+  const isAdmin = useIsAdmin();
   const [showDuplicates, setShowDuplicates] = useState(true);
   const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Function to handle the delete confirmation
   const handleDeleteConfirm = () => {
+    if (!isAdmin) {
+      return;
+    }
     setIsDeleting(true);
   };
 
@@ -145,17 +168,45 @@ export default function BatchDetailPage() {
           <Link to="/batches" className="btn btn-outline join-item">
             Back to Batches
           </Link>
-          {batch && (
-            <button
-              onClick={handleDeleteConfirm}
-              className="btn btn-error join-item"
-              disabled={isDeleting}
-            >
-              Delete Batch
-            </button>
-          )}
+          {batch &&
+            (isAdmin ? (
+              <button
+                onClick={handleDeleteConfirm}
+                className="btn btn-error join-item"
+                disabled={isDeleting}
+              >
+                Delete Batch
+              </button>
+            ) : (
+              <button
+                className="btn btn-error join-item btn-disabled"
+                title="Admin access required"
+              >
+                Delete Batch
+              </button>
+            ))}
         </div>
       </div>
+
+      {!isAdmin && (
+        <div className="alert alert-warning mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+          <span>Admin access required to delete batches</span>
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="alert alert-error mb-4">
@@ -164,7 +215,7 @@ export default function BatchDetailPage() {
       )}
 
       {/* Delete confirmation modal */}
-      {isDeleting && (
+      {isAdmin && isDeleting && (
         <dialog open className="modal modal-open">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Confirm Deletion</h3>

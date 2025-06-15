@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Form,
   Link,
+  redirect,
   useActionData,
   useLoaderData,
   useNavigate,
@@ -12,6 +13,13 @@ import type { Route } from "./+types/owners.$id";
 import { owners } from "../../database/schema";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    throw redirect("/owners");
+  }
+
   const ownerId = Number.parseInt(params.id);
 
   // Make sure we have a valid numeric ID
@@ -32,6 +40,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     return {
       owner,
       error: null,
+      isAdmin: session?.isAdmin ?? false,
     };
   } catch (error) {
     // Only catch non-Response errors
@@ -44,6 +53,16 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to edit owners",
+    };
+  }
+
   const ownerId = Number.parseInt(params.id);
 
   // Make sure we have a valid numeric ID

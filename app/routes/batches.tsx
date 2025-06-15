@@ -1,13 +1,16 @@
 import { Link, useLoaderData } from "react-router";
+import { useIsAdmin } from "~/hooks";
 import type { Route } from "./+types/batches";
 
 type BatchLoaderData = {
   batches: any[];
   error: string | null;
+  isAdmin: boolean;
 };
 
 export async function loader({ context }: Route.LoaderArgs) {
   try {
+    const session = await context.getSession();
     const batches = await context.db.query.transactionBatches.findMany({
       orderBy: (transactionBatches, { desc }) => [
         desc(transactionBatches.processed_at),
@@ -17,18 +20,21 @@ export async function loader({ context }: Route.LoaderArgs) {
     return {
       batches,
       error: null,
+      isAdmin: session?.isAdmin ?? false,
     };
   } catch (error) {
     console.error("Error loading transaction batches:", error);
     return {
       batches: [],
       error: "Failed to load transaction batches",
+      isAdmin: false,
     };
   }
 }
 
 export default function BatchesPage() {
   const { batches, error } = useLoaderData<BatchLoaderData>();
+  const isAdmin = useIsAdmin();
 
   // Format date function
   const formatDate = (timestamp: number) => {
@@ -51,11 +57,40 @@ export default function BatchesPage() {
           </p>
         </div>
         <div>
-          <Link to="/batches/import" className="btn btn-primary">
-            Import New Batch
-          </Link>
+          {isAdmin ? (
+            <Link to="/batches/import" className="btn btn-primary">
+              Import New Batch
+            </Link>
+          ) : (
+            <button
+              className="btn btn-primary btn-disabled"
+              title="Admin access required"
+            >
+              Import New Batch
+            </button>
+          )}
         </div>
       </div>
+
+      {!isAdmin && (
+        <div className="alert alert-warning mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+          <span>Admin access required to import new batches</span>
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="alert alert-error mb-4">

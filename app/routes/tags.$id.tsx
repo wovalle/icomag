@@ -1,18 +1,18 @@
 import { and, desc, eq, ne } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import {
-    Link,
-    useActionData,
-    useFetcher,
-    useLoaderData,
-    useNavigate
+  Link,
+  useActionData,
+  useFetcher,
+  useLoaderData,
+  useNavigate,
 } from "react-router";
 import {
-    owners,
-    tagPatterns,
-    transactions,
-    transactionTags,
-    transactionToTags,
+  owners,
+  tagPatterns,
+  transactions,
+  transactionTags,
+  transactionToTags,
 } from "../../database/schema";
 import type { Route } from "./+types/tags.$id";
 
@@ -25,6 +25,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   }
 
   try {
+    const session = await context.getSession();
     const tag = await context.db.query.transactionTags.findFirst({
       where: eq(transactionTags.id, tagId),
       with: {
@@ -78,6 +79,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       patterns,
       recentTransactions,
       error: null,
+      isAdmin: session?.isAdmin ?? false,
     };
   } catch (error) {
     // Only catch non-Response errors
@@ -90,6 +92,16 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 }
 
 export async function action({ params, context, request }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to modify tags",
+    };
+  }
+
   const id = parseInt(params.id || "0");
   if (!id) {
     return { success: false, error: "Invalid tag ID" };
@@ -148,7 +160,7 @@ export async function action({ params, context, request }: Route.ActionArgs) {
 }
 
 export default function TagDetailsPage() {
-  const { tag, allTags, patterns, recentTransactions, error } =
+  const { tag, allTags, patterns, recentTransactions, error, isAdmin } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -175,12 +187,17 @@ export default function TagDetailsPage() {
       navigate(actionData.redirect);
     }
 
+    // Close edit modal when edit action is successful
+    if (actionData?.success && actionData?.action === "edit") {
+      setIsEditModalOpen(false);
+    }
+
     if (actionData?.error) {
       setActionError(actionData.error);
     } else {
       setActionError(null);
     }
-  }, [actionData, navigate]);
+  }, [actionData?.success, navigate]);
 
   // Format currency function
   const formatCurrency = (amount: number) => {
@@ -233,20 +250,44 @@ export default function TagDetailsPage() {
           )}
         </div>
         <div className="join mt-4 md:mt-0">
-          <button
-            onClick={() => setIsEditModalOpen(true)}
-            className="btn btn-primary join-item"
-          >
-            Edit Tag
-          </button>
-          <button
-            onClick={() => setIsPatternModalOpen(true)}
-            className="btn join-item"
-          >
-            Add Pattern
-          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="btn btn-primary join-item"
+              >
+                Edit Tag
+              </button>
+              <button
+                onClick={() => setIsPatternModalOpen(true)}
+                className="btn join-item"
+              >
+                Add Pattern
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {!isAdmin && (
+        <div className="alert alert-warning mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+          <span>Admin access required to modify tag information</span>
+        </div>
+      )}
 
       {/* Tag Information */}
       <div className="card shadow-md mb-6">
@@ -383,58 +424,64 @@ export default function TagDetailsPage() {
                           )}
                         </td>
                         <td className="flex gap-2">
-                          <fetcher.Form
-                            method="post"
-                            action={`/tags/${tag.id}/patterns`}
-                            className="inline"
-                          >
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="toggle"
-                            />
-                            <input
-                              type="hidden"
-                              name="patternId"
-                              value={pattern.id}
-                            />
-                            <button type="submit" className="btn btn-sm">
-                              {pattern.is_active
-                                ? "Deactivate"
-                                : "Activate"}
-                            </button>
-                          </fetcher.Form>
-                          <fetcher.Form
-                            method="post"
-                            action={`/tags/${tag.id}/patterns`}
-                            className="inline"
-                            onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
-                              if (
-                                !confirm(
-                                  "Are you sure you want to delete this pattern?"
-                                )
-                              ) {
-                                e.preventDefault();
-                              }
-                            }}
-                          >
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="delete"
-                            />
-                            <input
-                              type="hidden"
-                              name="patternId"
-                              value={pattern.id}
-                            />
-                            <button
-                              type="submit"
-                              className="btn btn-sm btn-error"
-                            >
-                              Delete
-                            </button>
-                          </fetcher.Form>
+                          {isAdmin && (
+                            <>
+                              <fetcher.Form
+                                method="post"
+                                action={`/tags/${tag.id}/patterns`}
+                                className="inline"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="toggle"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="patternId"
+                                  value={pattern.id}
+                                />
+                                <button type="submit" className="btn btn-sm">
+                                  {pattern.is_active
+                                    ? "Deactivate"
+                                    : "Activate"}
+                                </button>
+                              </fetcher.Form>
+                              <fetcher.Form
+                                method="post"
+                                action={`/tags/${tag.id}/patterns`}
+                                className="inline"
+                                onSubmit={(
+                                  e: React.FormEvent<HTMLFormElement>
+                                ) => {
+                                  if (
+                                    !confirm(
+                                      "Are you sure you want to delete this pattern?"
+                                    )
+                                  ) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="delete"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="patternId"
+                                  value={pattern.id}
+                                />
+                                <button
+                                  type="submit"
+                                  className="btn btn-sm btn-error"
+                                >
+                                  Delete
+                                </button>
+                              </fetcher.Form>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -451,76 +498,78 @@ export default function TagDetailsPage() {
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Edit Tag</h3>
-            <fetcher.Form method="post">
-              <input type="hidden" name="_method" value="patch" />
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Name</span>
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  defaultValue={tag.name}
-                  className="input input-bordered"
-                  required
-                />
-              </div>
+            {isAdmin && (
+              <fetcher.Form method="post">
+                <input type="hidden" name="_method" value="patch" />
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Name</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={tag.name}
+                    className="input input-bordered"
+                    required
+                  />
+                </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Description</span>
-                </label>
-                <input
-                  type="text"
-                  name="description"
-                  defaultValue={tag.description || ""}
-                  className="input input-bordered"
-                />
-              </div>
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Description</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="description"
+                    defaultValue={tag.description || ""}
+                    className="input input-bordered"
+                  />
+                </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Parent Tag</span>
-                </label>
-                <select
-                  name="parentId"
-                  className="select select-bordered"
-                  defaultValue={tag.parent_id?.toString() || ""}
-                >
-                  <option value="">No Parent Tag</option>
-                  {allTags.map((otherTag) => (
-                    <option key={otherTag.id} value={otherTag.id}>
-                      {otherTag.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Parent Tag</span>
+                  </label>
+                  <select
+                    name="parentId"
+                    className="select select-bordered"
+                    defaultValue={tag.parent_id?.toString() || ""}
+                  >
+                    <option value="">No Parent Tag</option>
+                    {allTags.map((otherTag) => (
+                      <option key={otherTag.id} value={otherTag.id}>
+                        {otherTag.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Color</span>
-                </label>
-                <input
-                  type="color"
-                  name="color"
-                  defaultValue={tag.color || "#000000"}
-                  className="input input-bordered h-12"
-                />
-              </div>
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Color</span>
+                  </label>
+                  <input
+                    type="color"
+                    name="color"
+                    defaultValue={tag.color || "#000000"}
+                    className="input input-bordered h-12"
+                  />
+                </div>
 
-              <div className="modal-action">
-                <button type="submit" className="btn btn-primary">
-                  Save Changes
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setIsEditModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </fetcher.Form>
+                <div className="modal-action">
+                  <button type="submit" className="btn btn-primary">
+                    Save Changes
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setIsEditModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </fetcher.Form>
+            )}
           </div>
           <form method="dialog" className="modal-backdrop">
             <button onClick={() => setIsEditModalOpen(false)}>close</button>
@@ -533,60 +582,62 @@ export default function TagDetailsPage() {
         <dialog open className="modal">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Add Recognition Pattern</h3>
-            <fetcher.Form method="post" action={`/tags/${tag.id}/patterns`}>
-              <input type="hidden" name="intent" value="create" />
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Pattern</span>
-                </label>
-                <input
-                  type="text"
-                  name="pattern"
-                  placeholder="Enter regex pattern"
-                  className="input input-bordered"
-                  required
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Description</span>
-                </label>
-                <input
-                  type="text"
-                  name="description"
-                  placeholder="e.g. Groceries, Utilities"
-                  className="input input-bordered"
-                />
-              </div>
-
-              <div className="form-control mt-4">
-                <label className="label cursor-pointer">
-                  <span className="label-text">
-                    Apply to existing transactions
-                  </span>
+            {isAdmin && (
+              <fetcher.Form method="post" action={`/tags/${tag.id}/patterns`}>
+                <input type="hidden" name="intent" value="create" />
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Pattern</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    name="applyToExisting"
-                    className="checkbox"
-                    defaultChecked={true}
+                    type="text"
+                    name="pattern"
+                    placeholder="Enter regex pattern"
+                    className="input input-bordered"
+                    required
                   />
-                </label>
-              </div>
+                </div>
 
-              <div className="modal-action">
-                <button type="submit" className="btn btn-primary">
-                  Save
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setIsPatternModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </fetcher.Form>
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Description</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="description"
+                    placeholder="e.g. Groceries, Utilities"
+                    className="input input-bordered"
+                  />
+                </div>
+
+                <div className="form-control mt-4">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">
+                      Apply to existing transactions
+                    </span>
+                    <input
+                      type="checkbox"
+                      name="applyToExisting"
+                      className="checkbox"
+                      defaultChecked={true}
+                    />
+                  </label>
+                </div>
+
+                <div className="modal-action">
+                  <button type="submit" className="btn btn-primary">
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setIsPatternModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </fetcher.Form>
+            )}
           </div>
           <form method="dialog" className="modal-backdrop">
             <button onClick={() => setIsPatternModalOpen(false)}>close</button>

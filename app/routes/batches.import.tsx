@@ -7,13 +7,31 @@ import type { Route } from "./+types/batches.import";
 
 type ImportLoaderData = {
   error: string | null;
+  isAdmin: boolean;
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  return { error: null };
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    throw redirect("/batches");
+  }
+
+  return {
+    error: null,
+    isAdmin: session?.isAdmin ?? false,
+  };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return { error: "Admin privileges required to import batches" };
+  }
+
   const formData = await request.formData();
   const file = formData.get("csvFile");
   const usePatternMatching = formData.get("usePatternMatching") === "on";
