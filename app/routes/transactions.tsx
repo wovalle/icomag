@@ -1,10 +1,5 @@
 import { useState } from "react";
-import {
-    Link,
-    useFetcher,
-    useLoaderData,
-    useSearchParams
-} from "react-router";
+import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import AddTransactionModal from "../components/AddTransactionModal";
 import TransactionFilters from "../components/TransactionFilters";
 import TransactionTable from "../components/TransactionTable";
@@ -17,16 +12,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
     // Get filter params from URL
     const url = new URL(request.url);
-    const ownerId = url.searchParams.get("ownerId");
+    const rawOwnerId = url.searchParams.get("ownerId");
     const transactionType = url.searchParams.get("type");
-    const tagId = url.searchParams.get("tagId");
+    const rawTagId = url.searchParams.get("tagId");
     const startDate = url.searchParams.get("startDate");
     const endDate = url.searchParams.get("endDate");
     const page = parseInt(url.searchParams.get("page") || "1");
     const searchTerm = url.searchParams.get("search") || "";
-    // Add new filter parameters
-    const noOwner = url.searchParams.get("noOwner") === "true";
-    const noTags = url.searchParams.get("noTags") === "true";
+
+    // Handle special filter values
+    const noOwner = rawOwnerId === "no-owner";
+    const noTags = rawTagId === "no-tags";
+    const ownerId = noOwner ? null : rawOwnerId;
+    const tagId = noTags ? null : rawTagId;
+
     const limit = 20;
 
     // Run all queries in parallel with Promise.all
@@ -53,9 +52,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       tags: tagsResult.tags || [],
       pagination: transactionsResult.pagination,
       filters: {
-        ownerId,
+        ownerId: rawOwnerId,
         transactionType,
-        tagId,
+        tagId: rawTagId,
         search: searchTerm,
         startDate,
         endDate,
@@ -210,8 +209,8 @@ export default function TransactionsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const fetcher = useFetcher<typeof action>();
 
-  // Handle filter application
-  const applyFilters = (filters: {
+  // Handle filter application - simplified to just update URL params
+  const applyFilters = (newFilters: {
     type: string;
     ownerId: string;
     tagId: string;
@@ -223,22 +222,36 @@ export default function TransactionsPage() {
   }) => {
     const newParams = new URLSearchParams();
 
-    if (filters.type) newParams.append("type", filters.type);
-    if (filters.ownerId) newParams.append("ownerId", filters.ownerId);
-    if (filters.tagId) newParams.append("tagId", filters.tagId);
-    if (filters.search) newParams.append("search", filters.search);
-    if (filters.startDate) newParams.append("startDate", filters.startDate);
-    if (filters.endDate) newParams.append("endDate", filters.endDate);
-    if (filters.noOwner) newParams.append("noOwner", "true");
-    if (filters.noTags) newParams.append("noTags", "true");
-    newParams.append("page", "1"); // Reset to first page on filter change
+    // Only add parameters that have values
+    if (newFilters.type) newParams.append("type", newFilters.type);
+    if (newFilters.search) newParams.append("search", newFilters.search);
+    if (newFilters.startDate)
+      newParams.append("startDate", newFilters.startDate);
+    if (newFilters.endDate) newParams.append("endDate", newFilters.endDate);
 
-    setSearchParams(newParams);
+    // Handle owner filter
+    if (newFilters.noOwner) {
+      newParams.append("ownerId", "no-owner");
+    } else if (newFilters.ownerId) {
+      newParams.append("ownerId", newFilters.ownerId);
+    }
+
+    // Handle tag filter
+    if (newFilters.noTags) {
+      newParams.append("tagId", "no-tags");
+    } else if (newFilters.tagId) {
+      newParams.append("tagId", newFilters.tagId);
+    }
+
+    // Reset to first page when filters change
+    newParams.append("page", "1");
+
+    setSearchParams(newParams, { replace: true });
   };
 
   // Handle filter reset
   const resetFilters = () => {
-    setSearchParams({});
+    setSearchParams({}, { replace: true });
   };
 
   // Handle pagination

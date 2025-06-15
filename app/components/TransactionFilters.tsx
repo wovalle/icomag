@@ -1,3 +1,13 @@
+import {
+  Calendar,
+  CreditCard,
+  Filter,
+  RotateCcw,
+  Search,
+  Tag as TagIcon,
+  User,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import type { Owner, Tag } from "../types";
 
@@ -37,91 +47,147 @@ export default function TransactionFilters({
   const [filterType, setFilterType] = useState(
     initialFilters.transactionType || ""
   );
-  const [filterOwner, setFilterOwner] = useState(initialFilters.ownerId || "");
-  const [filterTag, setFilterTag] = useState(initialFilters.tagId || "");
+  const [filterOwner, setFilterOwner] = useState(() => {
+    if (initialFilters.noOwner) return "no-owner";
+    return initialFilters.ownerId || "";
+  });
+  const [filterTag, setFilterTag] = useState(() => {
+    if (initialFilters.noTags) return "no-tags";
+    return initialFilters.tagId || "";
+  });
   const [searchTerm, setSearchTerm] = useState(initialFilters.search || "");
   const [startDate, setStartDate] = useState(initialFilters.startDate || "");
   const [endDate, setEndDate] = useState(initialFilters.endDate || "");
-  const [noOwner, setNoOwner] = useState(initialFilters.noOwner || false);
-  const [noTags, setNoTags] = useState(initialFilters.noTags || false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Update filters whenever any control changes
-  const handleFilterChange = (
-    updater: React.Dispatch<React.SetStateAction<string | boolean>>,
-    value: string | boolean
-  ) => {
-    updater(value);
+  // Apply filters function
+  const applyCurrentFilters = () => {
+    const isNoOwner = filterOwner === "no-owner";
+    const isNoTags = filterTag === "no-tags";
 
-    setTimeout(() => {
-      // If "No Owner" is selected, reset the owner filter
-      let currentOwner = filterOwner;
-      let currentNoOwner = noOwner;
-
-      if (updater === setNoOwner && value === true) {
-        currentOwner = "";
-        setFilterOwner("");
-      } else if (updater === setFilterOwner && value !== "") {
-        currentNoOwner = false;
-        setNoOwner(false);
-      }
-
-      // If "No Tags" is selected, reset the tag filter
-      let currentTag = filterTag;
-      let currentNoTags = noTags;
-
-      if (updater === setNoTags && value === true) {
-        currentTag = "";
-        setFilterTag("");
-      } else if (updater === setFilterTag && value !== "") {
-        currentNoTags = false;
-        setNoTags(false);
-      }
-
-      // Apply filters
-      onApplyFilters({
-        type: filterType,
-        ownerId: updater === setFilterOwner ? value.toString() : currentOwner,
-        tagId: updater === setFilterTag ? value.toString() : currentTag,
-        search: searchTerm,
-        startDate: startDate,
-        endDate: endDate,
-        noOwner: updater === setNoOwner ? Boolean(value) : currentNoOwner,
-        noTags: updater === setNoTags ? Boolean(value) : currentNoTags,
-      });
-    }, 0);
+    onApplyFilters({
+      type: filterType,
+      ownerId: isNoOwner ? "" : filterOwner,
+      tagId: isNoTags ? "" : filterTag,
+      search: searchTerm,
+      startDate,
+      endDate,
+      noOwner: isNoOwner,
+      noTags: isNoTags,
+    });
   };
 
-  const resetFilters = () => {
+  const resetAllFilters = () => {
     setFilterType("");
     setFilterOwner("");
     setFilterTag("");
     setSearchTerm("");
     setStartDate("");
     setEndDate("");
-    setNoOwner(false);
-    setNoTags(false);
     onResetFilters();
   };
 
-  // Check if any filters are active
-  const hasActiveFilters =
-    filterType ||
-    filterOwner ||
-    filterTag ||
-    searchTerm ||
-    startDate ||
-    endDate ||
-    noOwner ||
-    noTags;
+  const removeFilter = (filterName: string) => {
+    switch (filterName) {
+      case "type":
+        setFilterType("");
+        break;
+      case "owner":
+        setFilterOwner("");
+        break;
+      case "tag":
+        setFilterTag("");
+        break;
+      case "search":
+        setSearchTerm("");
+        break;
+      case "startDate":
+        setStartDate("");
+        break;
+      case "endDate":
+        setEndDate("");
+        break;
+    }
+  };
+
+  // Get active filters for display
+  const getActiveFilters = () => {
+    const filters = [];
+
+    if (filterType) {
+      filters.push({
+        key: "type",
+        label: filterType === "debit" ? "Money In" : "Money Out",
+        icon: CreditCard,
+      });
+    }
+
+    if (filterOwner) {
+      const label =
+        filterOwner === "no-owner"
+          ? "No Owner"
+          : owners.find((o) => o.id.toString() === filterOwner)?.name ||
+            "Unknown Owner";
+      filters.push({
+        key: "owner",
+        label,
+        icon: User,
+      });
+    }
+
+    if (filterTag) {
+      const label =
+        filterTag === "no-tags"
+          ? "No Tags"
+          : tags.find((t) => t.id.toString() === filterTag)?.name ||
+            "Unknown Tag";
+      filters.push({
+        key: "tag",
+        label,
+        icon: TagIcon,
+      });
+    }
+
+    if (searchTerm) {
+      filters.push({
+        key: "search",
+        label: `"${searchTerm}"`,
+        icon: Search,
+      });
+    }
+
+    if (startDate) {
+      filters.push({
+        key: "startDate",
+        label: `From ${startDate}`,
+        icon: Calendar,
+      });
+    }
+
+    if (endDate) {
+      filters.push({
+        key: "endDate",
+        label: `Until ${endDate}`,
+        icon: Calendar,
+      });
+    }
+
+    return filters;
+  };
+
+  const activeFilters = getActiveFilters();
+  const hasActiveFilters = activeFilters.length > 0;
 
   return (
     <div className="bg-base-200 p-4 rounded-lg mb-6">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold">Filter Transactions</h3>
+          <Filter className="w-5 h-5" />
+          <h3 className="font-semibold">Filters</h3>
           {hasActiveFilters && (
-            <div className="badge badge-primary badge-sm">Active</div>
+            <div className="badge badge-primary badge-sm">
+              {activeFilters.length}
+            </div>
           )}
         </div>
         <div className="flex gap-2">
@@ -129,183 +195,169 @@ export default function TransactionFilters({
             className="btn btn-sm btn-ghost md:hidden"
             onClick={() => setShowFilters(!showFilters)}
           >
-            {showFilters ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4.5 15.75l7.5-7.5 7.5 7.5"
-                />
-              </svg>
-            ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-                />
-              </svg>
-            )}
-            Filter
+            <Filter className="w-4 h-4" />
+            {showFilters ? "Hide" : "Show"}
           </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={resetFilters}
-            title="Reset Filters"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-5 h-5"
+          {hasActiveFilters && (
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={resetAllFilters}
+              title="Clear all filters"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-              />
-            </svg>
-          </button>
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">Clear</span>
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Active Filters Display */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2 mb-4 p-3 bg-base-100 rounded-lg">
+          {activeFilters.map((filter) => {
+            const IconComponent = filter.icon;
+            return (
+              <div
+                key={filter.key}
+                className="badge badge-primary gap-1 py-2 px-3"
+              >
+                <IconComponent className="w-3 h-3" />
+                <span className="text-xs">{filter.label}</span>
+                <button
+                  onClick={() => removeFilter(filter.key)}
+                  className="ml-1 hover:bg-primary-focus rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Search is always visible */}
       <div className="form-control mb-4">
-        <label className="label">
-          <span className="label-text">Search</span>
-        </label>
-        <input
-          type="text"
-          placeholder="Search descriptions, references..."
-          className="input input-bordered w-full"
-          value={searchTerm}
-          onChange={(e) => handleFilterChange(setSearchTerm, e.target.value)}
-        />
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-base-content/50" />
+          <input
+            type="text"
+            placeholder="Search descriptions, references..."
+            className="input input-bordered w-full pl-10"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              // Use setTimeout to apply filters after state update
+              setTimeout(() => applyCurrentFilters(), 0);
+            }}
+          />
+        </div>
       </div>
 
       <div className={`${showFilters ? "block" : "hidden"} md:block`}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="form-control">
             <label className="label">
-              <span className="label-text">Transaction Type</span>
+              <span className="label-text flex items-center gap-1">
+                <CreditCard className="w-4 h-4" />
+                Type
+              </span>
             </label>
             <select
               className="select select-bordered w-full"
               value={filterType}
-              onChange={(e) =>
-                handleFilterChange(setFilterType, e.target.value)
-              }
+              onChange={(e) => {
+                setFilterType(e.target.value);
+                setTimeout(() => applyCurrentFilters(), 0);
+              }}
             >
               <option value="">All Types</option>
-              <option value="debit">Debit (Money In)</option>
-              <option value="credit">Credit (Money Out)</option>
+              <option value="debit">Money In</option>
+              <option value="credit">Money Out</option>
             </select>
           </div>
+
           <div className="form-control">
             <label className="label">
-              <span className="label-text">Owner</span>
+              <span className="label-text flex items-center gap-1">
+                <User className="w-4 h-4" />
+                Owner
+              </span>
             </label>
             <select
               className="select select-bordered w-full"
               value={filterOwner}
-              onChange={(e) =>
-                handleFilterChange(setFilterOwner, e.target.value)
-              }
-              disabled={noOwner}
+              onChange={(e) => {
+                setFilterOwner(e.target.value);
+                setTimeout(() => applyCurrentFilters(), 0);
+              }}
             >
               <option value="">All Owners</option>
+              <option value="no-owner">No Owner</option>
               {owners.map((owner) => (
                 <option key={owner.id} value={owner.id}>
                   {owner.name} ({owner.apartment_id})
                 </option>
               ))}
             </select>
-            <div className="mt-2">
-              <label className="cursor-pointer label justify-start gap-2">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm"
-                  checked={noOwner}
-                  onChange={(e) =>
-                    handleFilterChange(setNoOwner, e.target.checked)
-                  }
-                />
-                <span className="label-text">
-                  Only show transactions with no owner
-                </span>
-              </label>
-            </div>
           </div>
+
           <div className="form-control">
             <label className="label">
-              <span className="label-text">Tags</span>
+              <span className="label-text flex items-center gap-1">
+                <TagIcon className="w-4 h-4" />
+                Tags
+              </span>
             </label>
             <select
               className="select select-bordered w-full"
               value={filterTag}
-              onChange={(e) => handleFilterChange(setFilterTag, e.target.value)}
-              disabled={noTags}
+              onChange={(e) => {
+                setFilterTag(e.target.value);
+                setTimeout(() => applyCurrentFilters(), 0);
+              }}
             >
               <option value="">All Tags</option>
+              <option value="no-tags">No Tags</option>
               {tags.map((tag) => (
                 <option key={tag.id} value={tag.id}>
                   {tag.name}
                 </option>
               ))}
             </select>
-            <div className="mt-2">
-              <label className="cursor-pointer label justify-start gap-2">
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text flex items-center gap-1">
+                <Calendar className="w-4 h-4" /> Date
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <div className="flex items-center gap-1 flex-1">
+                <span className="text-sm text-base-content/70">From:</span>
                 <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm"
-                  checked={noTags}
-                  onChange={(e) =>
-                    handleFilterChange(setNoTags, e.target.checked)
-                  }
+                  type="date"
+                  className="input input-bordered w-full text-sm"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setTimeout(() => applyCurrentFilters(), 0);
+                  }}
                 />
-                <span className="label-text">
-                  Only show transactions with no tags
-                </span>
-              </label>
+              </div>
+              <div className="flex items-center gap-1 flex-1">
+                <span className="text-sm text-base-content/70">To:</span>
+                <input
+                  type="date"
+                  className="input input-bordered w-full text-sm"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setTimeout(() => applyCurrentFilters(), 0);
+                  }}
+                />
+              </div>
             </div>
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Start Date</span>
-            </label>
-            <input
-              type="date"
-              className="input input-bordered w-full"
-              value={startDate}
-              onChange={(e) => handleFilterChange(setStartDate, e.target.value)}
-            />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">End Date</span>
-            </label>
-            <input
-              type="date"
-              className="input input-bordered w-full"
-              value={endDate}
-              onChange={(e) => handleFilterChange(setEndDate, e.target.value)}
-            />
           </div>
         </div>
       </div>

@@ -1,9 +1,7 @@
-import type { InferSelectModel } from "drizzle-orm";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
-import type { transactionTags } from "../../database/schema";
-import type { Owner, Transaction, Tag } from "../types";
+import type { Owner, Tag, Transaction } from "../types";
 
 interface TransactionTableRowProps {
   transaction: Transaction;
@@ -354,4 +352,101 @@ export default function TransactionTableRow({
                 style={{ backgroundColor: tag.color || "#888" }}
               >
                 <Link
-                  to={`
+                  to={`/transactions?tagId=${tag.id}`}
+                  className="hover:brightness-90"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {tag.name}
+                </Link>
+                {isAdmin && (
+                  <button
+                    className="btn btn-xs btn-circle btn-ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveTag(transaction.id, tag.id);
+                    }}
+                    disabled={!isAdmin}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+        </div>
+        {isAdmin && (
+          <div className="flex">
+            <select
+              className="select select-xs select-bordered w-full"
+              defaultValue=""
+              onChange={handleTagChange}
+              disabled={!isAdmin}
+            >
+              <option value="">Add tag...</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </td>
+      {isAdmin && (
+        <td>
+          <details ref={menuRef} className="dropdown dropdown-end">
+            <summary className="btn btn-sm btn-circle">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
+                />
+              </svg>
+            </summary>
+            <ul className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-10">
+              <li>
+                <Link to={`/transactions/${transaction.id}`}>View Details</Link>
+              </li>
+              <li>
+                <button
+                  onClick={handleAutoAssignOwner}
+                  className={
+                    autoAssignFetcher.state !== "idle" ? "loading" : ""
+                  }
+                  disabled={autoAssignFetcher.state !== "idle" || !isAdmin}
+                >
+                  Auto-assign Owner
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={handleUploadClick}
+                  className={
+                    attachmentFetcher.state !== "idle" ? "loading" : ""
+                  }
+                  disabled={attachmentFetcher.state !== "idle" || !isAdmin}
+                >
+                  Upload Attachment
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  accept="image/*,application/pdf"
+                />
+              </li>
+            </ul>
+          </details>
+        </td>
+      )}
+    </tr>
+  );
+}
