@@ -128,7 +128,6 @@ export default function TransactionTable({
                 <th>Date</th>
                 <th>Description</th>
                 <th>Amount</th>
-                <th>Type</th>
                 <th>Owner</th>
                 <th>Tags</th>
                 {isAdmin && <th>Actions</th>}

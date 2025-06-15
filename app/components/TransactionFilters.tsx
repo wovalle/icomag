@@ -127,7 +127,7 @@ export default function TransactionFilters({
       </div>
 
       <div className={`${showFilters ? "block" : "hidden"} md:block`}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="form-control">
             <label className="label">
               <span className="label-text flex items-center gap-1">

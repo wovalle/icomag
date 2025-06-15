@@ -38,7 +38,6 @@ export default function TransactionTableRow({
   const [isEditing, setIsEditing] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
   const descriptionInputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDetailsElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoAssignFetcher = useFetcher();
   const attachmentFetcher = useFetcher();
@@ -87,11 +86,6 @@ export default function TransactionTableRow({
   const handleAutoAssignOwner = () => {
     if (!isAdmin) return;
 
-    // Close the menu after clicking
-    if (menuRef.current) {
-      menuRef.current.open = false;
-    }
-
     // Create form data for auto-assign request
     const formData = new FormData();
     formData.append("intent", "autoAssignOwner");
@@ -107,11 +101,6 @@ export default function TransactionTableRow({
   // Handle file upload
   const handleUploadClick = () => {
     if (!isAdmin) return;
-
-    // Close the menu after clicking
-    if (menuRef.current) {
-      menuRef.current.open = false;
-    }
 
     // Trigger file input click
     if (fileInputRef.current) {
@@ -267,53 +256,53 @@ export default function TransactionTableRow({
           )}
       </td>
       <td>
-        <div
-          className={
-            transaction.type === "credit" ? "text-success" : "text-error"
-          }
-        >
-          {formatCurrency(transaction.amount)}
-          {transaction.attachments && transaction.attachments.length > 0 && (
-            <div className="ml-2 inline-flex items-center">
-              {transaction.attachments.map((attachment, index) => (
-                <div
-                  key={attachment.id}
-                  className="inline-flex items-center mr-1"
-                >
-                  <a
-                    href={`/transactions/${transaction.id}/attachment/${attachment.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center"
-                    title={`View ${attachment.filename}`}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                      />
-                    </svg>
-                  </a>
-                </div>
-              ))}
-            </div>
+        <div className="flex items-center gap-2">
+          {transaction.type === "credit" ? (
+            <TrendingUp size={16} className="text-success" />
+          ) : (
+            <TrendingDown size={16} className="text-error" />
           )}
+          <div
+            className={
+              transaction.type === "credit" ? "text-success" : "text-error"
+            }
+          >
+            {formatCurrency(transaction.amount)}
+            {transaction.attachments && transaction.attachments.length > 0 && (
+              <div className="ml-2 inline-flex items-center">
+                {transaction.attachments.map((attachment, index) => (
+                  <div
+                    key={attachment.id}
+                    className="inline-flex items-center mr-1"
+                  >
+                    <a
+                      href={`/transactions/${transaction.id}/attachment/${attachment.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center"
+                      title={`View ${attachment.filename}`}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                        />
+                      </svg>
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </td>
-      <td>
-        {transaction.type === "credit" ? (
-          <TrendingUp size={16} className="text-success" />
-        ) : (
-          <TrendingDown size={16} className="text-error" />
-        )}
       </td>
       <td>
         {isAdmin && !transaction.owner_id ? (
@@ -393,8 +382,8 @@ export default function TransactionTableRow({
       </td>
       {isAdmin && (
         <td>
-          <details ref={menuRef} className="dropdown dropdown-end">
-            <summary className="btn btn-sm btn-circle">
+          <div className="dropdown dropdown-end">
+            <div tabIndex={0} role="button" className="btn btn-sm btn-circle">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -409,8 +398,11 @@ export default function TransactionTableRow({
                   d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
                 />
               </svg>
-            </summary>
-            <ul className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-10">
+            </div>
+            <ul
+              tabIndex={0}
+              className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-10"
+            >
               <li>
                 <Link to={`/transactions/${transaction.id}`}>View Details</Link>
               </li>
@@ -444,7 +436,7 @@ export default function TransactionTableRow({
                 />
               </li>
             </ul>
-          </details>
+          </div>
         </td>
       )}
     </tr>
