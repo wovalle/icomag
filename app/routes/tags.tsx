@@ -1,11 +1,7 @@
 import { useState } from "react";
-import { Form, useFetcher, useLoaderData } from "react-router";
+import { Form, Link, useFetcher, useLoaderData } from "react-router";
+import type { Tag } from "../types";
 import type { Route } from "./+types/tags";
-
-interface Tag {
-  id: number;
-  name: string;
-}
 
 export async function loader({ context }: Route.LoaderArgs) {
   try {
@@ -94,7 +90,20 @@ export default function TagsPage() {
         {tags.map((tag: Tag) => (
           <div key={tag.id} className="card bg-base-100 shadow-xl">
             <div className="card-body">
-              <h2 className="card-title">{tag.name}</h2>
+              <div className="flex items-center gap-2">
+                <Link
+                  to={`/tags/${tag.id}`}
+                  className="card-title hover:text-primary"
+                >
+                  {tag.name}
+                </Link>
+                {tag.color && (
+                  <div
+                    className="w-6 h-6 rounded-full"
+                    style={{ backgroundColor: tag.color }}
+                  ></div>
+                )}
+              </div>
               <div className="card-actions justify-end">
                 <button
                   onClick={() => handleDeleteTag(tag.id)}
