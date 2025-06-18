@@ -41,6 +41,12 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       where: eq(transactionBatches.id, batchId),
     });
 
+    const klk = await context.dbRepository
+      .getTransactionBatchesRepository()
+      .findOne({
+        where: eq(transactionBatches.id, batchId),
+      });
+
     if (!batch) {
       return {
         batch: null,

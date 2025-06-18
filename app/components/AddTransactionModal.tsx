@@ -123,7 +123,7 @@ export default function AddTransactionModal({
                 name="tag_ids"
                 className="select select-bordered"
                 multiple
-                size="3"
+                size={3}
               >
                 {tags.map((tag) => (
                   <option key={tag.id} value={tag.id}>

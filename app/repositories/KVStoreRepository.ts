@@ -1,41 +1,42 @@
 import { eq } from "drizzle-orm";
-import { DrizzleD1Database } from "drizzle-orm/d1";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
+import { AuditService } from "../services/auditService";
+import { AuditableDrizzleRepository } from "./AuditableDrizzleRepository";
 
-export class KVStoreRepository {
-  private db: DrizzleD1Database<typeof schema>;
+type KVStoreEntry = {
+  key: string;
+  value: string;
+  updated_at: number;
+};
 
-  constructor(db: DrizzleD1Database<typeof schema>) {
-    this.db = db;
+export class KVStoreRepository extends AuditableDrizzleRepository<
+  typeof schema.kvStore
+> {
+  constructor(
+    db: DrizzleD1Database<typeof schema>,
+    auditService: AuditService
+  ) {
+    super(db, schema.kvStore, auditService, "SYSTEM");
   }
 
   async get(key: string): Promise<string | null> {
-    const result = await this.db
-      .select({ value: schema.kvStore.value })
-      .from(schema.kvStore)
-      .where(eq(schema.kvStore.key, key))
-      .get();
-
-    return result?.value || null;
+    const result = await this.findOne<KVStoreEntry>({
+      where: eq(schema.kvStore.key, key),
+    });
+    return result?.value ?? null;
   }
 
   async set(key: string, value: string): Promise<void> {
-    await this.db
-      .insert(schema.kvStore)
-      .values({
-        key,
-        value,
-      })
-      .onConflictDoUpdate({
-        target: schema.kvStore.key,
-        set: {
-          value,
-          updated_at: Math.floor(Date.now() / 1000),
-        },
-      });
+    const now = Math.floor(Date.now() / 1000);
+    await this.upsert({
+      key,
+      value,
+      updated_at: now,
+    });
   }
 
   async delete(key: string): Promise<void> {
-    await this.db.delete(schema.kvStore).where(eq(schema.kvStore.key, key));
+    await this.delete(key);
   }
 }

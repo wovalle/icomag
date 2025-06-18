@@ -19,6 +19,7 @@ export default [
     "./routes/transactions.$id.attachment.$attachmentId.tsx"
   ),
   route("/balance", "./routes/balance.tsx"),
+  route("/audit-logs", "./routes/audit-logs.tsx"),
   route("/auth/signin", "./routes/auth.signin.tsx"),
   route("/api/auth/*", "./routes/api.auth.$.ts"),
 ] satisfies RouteConfig;

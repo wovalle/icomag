@@ -1,13 +1,17 @@
 import { eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
-import { DrizzleRepository } from "../drizzleRepository";
+import { AuditService } from "../services/auditService";
+import { AuditableDrizzleRepository } from "./AuditableDrizzleRepository";
 
-export class TransactionTagsRepository extends DrizzleRepository<
+export class TransactionTagsRepository extends AuditableDrizzleRepository<
   typeof schema.transactionTags
 > {
-  constructor(db: DrizzleD1Database<typeof schema>) {
-    super(db, schema.transactionTags);
+  constructor(
+    db: DrizzleD1Database<typeof schema>,
+    auditService: AuditService
+  ) {
+    super(db, schema.transactionTags, auditService, "TAG");
   }
 
   /**

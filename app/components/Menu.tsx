@@ -1,11 +1,12 @@
 import { LogOut } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { authClient } from "~/lib/auth-client";
-import { useCurrentUser } from "../hooks";
+import { useCurrentUser, useIsAdmin } from "../hooks";
 
 export function Menu() {
   const location = useLocation();
   const user = useCurrentUser();
+  const isAdmin = useIsAdmin();
 
   const handleSignOut = async () => {
     try {
@@ -78,6 +79,13 @@ export function Menu() {
                 Tags
               </Link>
             </li>
+            {isAdmin && (
+              <li>
+                <Link to="/audit-logs" className={isActive("/audit-logs")}>
+                  Audit Logs
+                </Link>
+              </li>
+            )}
           </ul>
         </div>
         <Link to="/" className="btn btn-ghost text-xl">
@@ -129,6 +137,16 @@ export function Menu() {
               Tags
             </Link>
           </li>
+          {isAdmin && (
+            <li>
+              <Link
+                to="/audit-logs"
+                className={`btn btn-ghost ${isActive("/audit-logs")}`}
+              >
+                Audit Logs
+              </Link>
+            </li>
+          )}
         </ul>
       </div>
       <div className="navbar-end">

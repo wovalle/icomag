@@ -33,14 +33,10 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     // Get current user info
     const userInfo = await context.getSession();
 
-    // Fetch transaction with owner
-    const transaction = await context.db.query.transactions.findFirst({
-      where: eq(transactions.id, id),
-      with: {
-        owner: true,
-        attachments: true,
-      },
-    });
+    // Fetch transaction with owner and attachments
+    const transaction = await context.dbRepository
+      .getTransactionsRepository()
+      .findOneWithOwnerAndAttachments(eq(transactions.id, id));
 
     if (!transaction) {
       return {
@@ -121,13 +117,9 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     const description = formData.get("description") as string;
 
     try {
-      await context.db
-        .update(transactions)
-        .set({
-          description,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, id));
+      await context.dbRepository
+        .getTransactionsRepository()
+        .update(id, { description, updated_at: Math.floor(Date.now() / 1000) });
 
       return { success: true };
     } catch (error) {
@@ -174,7 +166,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         .limit(1);
 
       if (existingTag.length === 0) {
-        await context.db.insert(transactionToTags).values({
+        await context.dbRepository.getTransactionTagsRepository().create({
           transaction_id: id,
           tag_id,
           created_at: Math.floor(Date.now() / 1000),
@@ -405,7 +397,6 @@ export default function TransactionDetail() {
 
   const owner = transaction.owner;
 
-  // Rest of your component remains largely the same, just using the loaderData
   return (
     <div className="container mx-auto p-4">
       <div className="flex items-center mb-6">

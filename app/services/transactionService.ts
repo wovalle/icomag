@@ -1,15 +1,22 @@
-import { and, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
+import { and, eq, type SQL } from "drizzle-orm";
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
-import {
-  owners,
-  tagPatterns,
-  transactionToTags,
-  transactions,
-} from "../../database/schema";
+import { RepositoryFactory } from "../repositories/RepositoryFactory";
 import type { Owner, Tag, Transaction, TransactionWithDetails } from "../types";
 
 export type DB = DrizzleD1Database<typeof schema>;
+
+interface OwnerPattern {
+  pattern: string;
+  owner_id: number;
+  is_active: number;
+}
+
+interface TagPattern {
+  pattern: string;
+  tag_id: number;
+  is_active: number;
+}
 
 /**
  * Transaction Service
@@ -17,10 +24,10 @@ export type DB = DrizzleD1Database<typeof schema>;
  * Contains all the business logic for interacting with transactions
  */
 export class TransactionService {
-  private db: DB;
+  private repositoryFactory: RepositoryFactory;
 
-  constructor(db: DB) {
-    this.db = db;
+  constructor(repositoryFactory: RepositoryFactory) {
+    this.repositoryFactory = repositoryFactory;
   }
 
   /**
@@ -31,9 +38,9 @@ export class TransactionService {
   ): Promise<{ success: boolean; owner_id?: number | null; error?: string }> {
     try {
       // First get the transaction to access its description
-      const transaction = await this.db.query.transactions.findFirst({
-        where: eq(transactions.id, transactionId),
-      });
+      const transaction = (await this.repositoryFactory
+        .getTransactionsRepository()
+        .findById(transactionId)) as Transaction | undefined;
 
       if (!transaction) {
         return { success: false, error: "Transaction not found" };
@@ -51,9 +58,11 @@ export class TransactionService {
         transaction.description || transaction.bank_description;
 
       // Get all active owner patterns
-      const allOwnerPatterns = await this.db.query.ownerPatterns.findMany({
-        where: eq(schema.ownerPatterns.is_active, 1),
-      });
+      const allOwnerPatterns = (await this.repositoryFactory
+        .getOwnerPatternsRepository()
+        .findMany({
+          where: eq(schema.ownerPatterns.is_active, 1) as SQL<unknown>,
+        })) as OwnerPattern[];
 
       // Find a matching pattern
       const matchingPattern = allOwnerPatterns.find(
@@ -66,13 +75,12 @@ export class TransactionService {
       }
 
       // Assign the owner
-      await this.db
-        .update(transactions)
-        .set({
+      await this.repositoryFactory
+        .getTransactionsRepository()
+        .update(transactionId, {
           owner_id: matchingPattern.owner_id,
           updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, transactionId));
+        });
 
       return { success: true, owner_id: matchingPattern.owner_id };
     } catch (error) {
@@ -89,9 +97,9 @@ export class TransactionService {
   ): Promise<{ success: boolean; tagIds?: number[]; error?: string }> {
     try {
       // First get the transaction to access its description
-      const transaction = await this.db.query.transactions.findFirst({
-        where: eq(transactions.id, transactionId),
-      });
+      const transaction = (await this.repositoryFactory
+        .getTransactionsRepository()
+        .findById(transactionId)) as Transaction | undefined;
 
       if (!transaction) {
         return { success: false, error: "Transaction not found" };
@@ -109,11 +117,13 @@ export class TransactionService {
         transaction.description || transaction.bank_description;
 
       // Get all active tag patterns
-      const allTagPatterns = await this.db.query.tagPatterns.findMany({
-        where: eq(tagPatterns.is_active, 1),
-      });
+      const allTagPatterns = (await this.repositoryFactory
+        .getTagPatternsRepository()
+        .findMany({
+          where: eq(schema.tagPatterns.is_active, 1) as SQL<unknown>,
+        })) as TagPattern[];
 
-      // Find all matching patterns
+      // Find matching patterns
       const matchingPatterns = allTagPatterns.filter(
         (pattern) =>
           descriptionText && new RegExp(pattern.pattern).test(descriptionText)
@@ -123,28 +133,26 @@ export class TransactionService {
         return { success: true, tagIds: [] };
       }
 
-      // Get unique tag IDs from matching patterns
-      const tagIds = [
-        ...new Set(matchingPatterns.map((pattern) => pattern.tag_id)),
-      ];
+      // Get the tag IDs from the matching patterns
+      const tagIds = matchingPatterns.map((pattern) => pattern.tag_id);
 
       // For each tag ID, check if it's already assigned to the transaction
       for (const tagId of tagIds) {
         // Check if the tag is already assigned to the transaction
-        const existingTag = await this.db
-          .select()
-          .from(transactionToTags)
-          .where(
-            and(
-              eq(transactionToTags.transaction_id, transactionId),
-              eq(transactionToTags.tag_id, tagId)
-            )
-          )
-          .limit(1);
+        const whereCondition: SQL<unknown> = and(
+          eq(schema.transactionToTags.transaction_id, transactionId),
+          eq(schema.transactionToTags.tag_id, tagId)
+        );
+
+        const existingTag = await this.repositoryFactory
+          .getTransactionToTagsRepository()
+          .findOne({
+            where: whereCondition,
+          });
 
         // If tag is not already assigned, add it
-        if (existingTag.length === 0) {
-          await this.db.insert(transactionToTags).values({
+        if (!existingTag) {
+          await this.repositoryFactory.getTransactionToTagsRepository().create({
             transaction_id: transactionId,
             tag_id: tagId,
             created_at: Math.floor(Date.now() / 1000),
@@ -167,13 +175,12 @@ export class TransactionService {
     description: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.db
-        .update(transactions)
-        .set({
+      await this.repositoryFactory
+        .getTransactionsRepository()
+        .update(transactionId, {
           description,
           updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, transactionId));
+        });
 
       return { success: true };
     } catch (error) {
@@ -196,13 +203,12 @@ export class TransactionService {
       // Convert to integer if not null, otherwise keep as null
       const owner_id = ownerId ? parseInt(ownerId) : null;
 
-      await this.db
-        .update(transactions)
-        .set({
+      await this.repositoryFactory
+        .getTransactionsRepository()
+        .update(transactionId, {
           owner_id,
           updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, transactionId));
+        });
 
       return { success: true };
     } catch (error) {
@@ -222,21 +228,19 @@ export class TransactionService {
       const tag_id = parseInt(tagId);
 
       // Check if the tag is already assigned to the transaction
-      const existingTag = await this.db
-        .select()
-        .from(transactionToTags)
-        .where(
-          and(
-            eq(transactionToTags.transaction_id, transactionId),
-            eq(transactionToTags.tag_id, tag_id)
-          )
-        )
-        .limit(1);
+      const existingTag = await this.repositoryFactory
+        .getTransactionToTagsRepository()
+        .findOne({
+          where: and(
+            eq(schema.transactionToTags.transaction_id, transactionId),
+            eq(schema.transactionToTags.tag_id, tag_id)
+          ),
+        });
 
-      if (existingTag.length === 0) {
-        await this.db.insert(transactionToTags).values({
+      if (!existingTag) {
+        await this.repositoryFactory.getTransactionToTagsRepository().create({
           transaction_id: transactionId,
-          tag_id,
+          tag_id: tag_id,
           created_at: Math.floor(Date.now() / 1000),
         });
       }
@@ -256,14 +260,20 @@ export class TransactionService {
     tagId: number
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.db
-        .delete(transactionToTags)
-        .where(
-          and(
-            eq(transactionToTags.transaction_id, transactionId),
-            eq(transactionToTags.tag_id, tagId)
-          )
-        );
+      const existingTransactionToTag = await this.repositoryFactory
+        .getTransactionToTagsRepository()
+        .findOne({
+          where: and(
+            eq(schema.transactionToTags.transaction_id, transactionId),
+            eq(schema.transactionToTags.tag_id, tagId)
+          ),
+        });
+
+      if (existingTransactionToTag) {
+        await this.repositoryFactory
+          .getTransactionToTagsRepository()
+          .delete(existingTransactionToTag.id);
+      }
 
       return { success: true };
     } catch (error) {
@@ -295,9 +305,9 @@ export class TransactionService {
         : null;
 
       // Insert the transaction
-      const [transaction] = await this.db
-        .insert(transactions)
-        .values({
+      const transaction = await this.repositoryFactory
+        .getTransactionsRepository()
+        .create({
           type: transactionData.type,
           amount: transactionData.amount,
           description: transactionData.description,
@@ -307,18 +317,17 @@ export class TransactionService {
           category: transactionData.category || null,
           created_at: Math.floor(Date.now() / 1000),
           updated_at: Math.floor(Date.now() / 1000),
-        })
-        .returning();
+        });
 
       // Add tags if any were selected
       if (transactionData.tag_ids && transactionData.tag_ids.length > 0) {
-        const tagValues = transactionData.tag_ids.map((tagId) => ({
-          transaction_id: transaction.id,
-          tag_id: parseInt(tagId),
-          created_at: Math.floor(Date.now() / 1000),
-        }));
-
-        await this.db.insert(transactionToTags).values(tagValues);
+        for (const tagId of transactionData.tag_ids) {
+          await this.repositoryFactory.getTransactionToTagsRepository().create({
+            transaction_id: transaction.id,
+            tag_id: parseInt(tagId),
+            created_at: Math.floor(Date.now() / 1000),
+          });
+        }
       }
 
       return { success: true, transaction: transaction as Transaction };
@@ -365,132 +374,23 @@ export class TransactionService {
     error?: string;
   }> {
     try {
-      // Build the where clause based on filters
-      let whereClause = [];
-      const offset = (page - 1) * limit;
-
-      // Owner filtering
-      if (noOwner) {
-        whereClause.push(isNull(transactions.owner_id));
-      } else if (ownerId) {
-        whereClause.push(eq(transactions.owner_id, parseInt(ownerId)));
-      }
-
-      if (transactionType) {
-        whereClause.push(eq(transactions.type, transactionType));
-      }
-
-      // Add date range filters
-      if (startDate) {
-        const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
-        whereClause.push(sql`${transactions.date} >= ${startTimestamp}`);
-      }
-
-      if (endDate) {
-        // Set to end of day for the end date
-        const endTimestamp = Math.floor(
-          new Date(endDate + "T23:59:59").getTime() / 1000
-        );
-        whereClause.push(sql`${transactions.date} <= ${endTimestamp}`);
-      }
-
-      if (searchTerm) {
-        whereClause.push(
-          or(
-            like(transactions.description, "%" + searchTerm + "%"),
-            like(transactions.bank_description, "%" + searchTerm + "%"),
-            like(transactions.reference, "%" + searchTerm + "%"),
-            like(transactions.serial, "%" + searchTerm + "%")
-          )
-        );
-      }
-
-      // Count total transactions for pagination
-      const totalCountResult = await this.db
-        .select({ count: sql`COUNT(*)` })
-        .from(transactions)
-        .leftJoin(
-          transactionToTags,
-          eq(transactions.id, transactionToTags.transaction_id)
-        )
-        .where(
-          and(
-            eq(transactions.is_duplicate, 0),
-            ...whereClause,
-            noTags === true
-              ? isNull(transactionToTags.tag_id)
-              : tagId
-              ? eq(transactionToTags.tag_id, parseInt(tagId))
-              : undefined
-          )
-        );
-
-      const totalCount = Number(totalCountResult[0]?.count || 0);
-
-      // If noTags is true, filter transactions that have no tags
-      if (noTags) {
-        whereClause.push(
-          inArray(
-            transactions.id,
-            sql`(
-            SELECT t.id
-            FROM transactions t
-            LEFT JOIN transaction_to_tags tt ON t.id = tt.transaction_id
-            WHERE tt.tag_id IS NULL
-            OR tt.tag_id = 0
-          )`
-          )
-        );
-      }
-
-      // If tagId is provided, filter by that tag
-      if (tagId) {
-        whereClause.push(
-          inArray(
-            transactions.id,
-            sql`(
-            SELECT transaction_id
-            FROM transaction_to_tags
-            WHERE tag_id = ${parseInt(tagId)}
-          )`
-          )
-        );
-      }
-
-      // Base query for transactions, always filtering out duplicates
-      const baseQuery = and(eq(transactions.is_duplicate, 0), ...whereClause);
-
-      // Get transactions with pagination
-      const transactionsList = await this.db.query.transactions.findMany({
-        where: baseQuery,
-        orderBy: (transactions, { desc }) => [desc(transactions.date)],
-        limit,
-        offset,
-        with: {
-          owner: true,
-          attachments: true,
-          tags: {
-            with: {
-              tag: true,
-            },
-          },
-        },
-      });
+      const result = await this.repositoryFactory
+        .getTransactionsRepository()
+        .findWithFilters({
+          ownerId,
+          transactionType,
+          tagId,
+          startDate,
+          endDate,
+          searchTerm,
+          noOwner,
+          noTags,
+          page,
+          limit,
+        });
 
       return {
-        transactions: transactionsList.map((transaction) => {
-          const tags = transaction.tags.map((tag) => tag.tag);
-          return {
-            ...transaction,
-            tags,
-          };
-        }),
-        pagination: {
-          totalCount,
-          pageCount: Math.ceil(totalCount / limit),
-          currentPage: page,
-          limit,
-        },
+        ...result,
         success: true,
       };
     } catch (error) {
@@ -518,37 +418,16 @@ export class TransactionService {
     error?: string;
   }> {
     try {
-      const transaction = await this.db.query.transactions.findFirst({
-        where: eq(transactions.id, id),
-      });
+      const transaction = await this.repositoryFactory
+        .getTransactionsRepository()
+        .findByIdWithDetails(id);
 
       if (!transaction) {
         return { success: false, error: "Transaction not found" };
       }
 
-      // Get tags for the transaction
-      const tagsRelations = await this.db.query.transactionToTags.findMany({
-        where: eq(transactionToTags.transaction_id, id),
-        with: {
-          tag: true,
-        },
-      });
-
-      const tags = tagsRelations.map((relation) => relation.tag);
-
-      // Get attachments for the transaction
-      const attachments = await this.db.query.attachments.findMany({
-        where: eq(schema.attachments.transaction_id, id),
-      });
-
-      const transactionWithDetails: TransactionWithDetails = {
-        ...transaction,
-        tags,
-        attachments,
-      };
-
       return {
-        transaction: transactionWithDetails,
+        transaction,
         success: true,
       };
     } catch (error) {
@@ -569,10 +448,12 @@ export class TransactionService {
     error?: string;
   }> {
     try {
-      const ownersList = await this.db.query.owners.findMany({
-        where: eq(owners.is_active, 1),
-        orderBy: (owners, { asc }) => [asc(owners.name)],
-      });
+      const ownersList = await this.repositoryFactory
+        .getOwnersRepository()
+        .findMany({
+          where: eq(schema.owners.is_active, 1),
+          orderBy: [{ column: schema.owners.name, direction: "asc" }],
+        });
 
       return {
         owners: ownersList as Owner[],
@@ -597,12 +478,14 @@ export class TransactionService {
     error?: string;
   }> {
     try {
-      const tagsList = await this.db.query.transactionTags.findMany({
-        orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
-        with: {
-          parentTag: true,
-        },
-      });
+      const tagsList = await this.repositoryFactory
+        .getTransactionTagsRepository()
+        .findMany({
+          orderBy: [{ column: schema.transactionTags.name, direction: "asc" }],
+          with: {
+            parentTag: true,
+          },
+        });
 
       return {
         tags: tagsList as Tag[],

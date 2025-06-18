@@ -82,17 +82,18 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return { success: false, error: "Name and Apartment ID are required" };
     }
 
-    await context.db
-      .update(owners)
-      .set({
-        name,
-        apartment_id,
-        email,
-        phone,
-        is_active,
-        updated_at: Math.floor(Date.now() / 1000),
-      })
-      .where(eq(owners.id, ownerId));
+    const updateData = {
+      name,
+      apartment_id,
+      email,
+      phone,
+      is_active,
+      updated_at: Math.floor(Date.now() / 1000),
+    };
+
+    await context.dbRepository
+      .getOwnersRepository()
+      .update(ownerId, updateData);
 
     return { success: true, redirect: `/owners/${ownerId}` };
   } catch (error) {

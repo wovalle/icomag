@@ -8,7 +8,7 @@ import type { Route } from "./+types/transactions";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   try {
-    const transactionService = new TransactionService(context.db);
+    const transactionService = new TransactionService(context.dbRepository);
     const session = await context.getSession();
 
     // Get filter params from URL
@@ -88,7 +88,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     };
   }
 
-  const transactionService = new TransactionService(context.db);
+  const transactionService = new TransactionService(context.dbRepository);
   const formData = await request.formData();
   const intent = formData.get("intent");
 

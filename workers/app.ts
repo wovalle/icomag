@@ -8,6 +8,7 @@ import {
   createRepositoryFactory,
 } from "../app/repositories/RepositoryFactory";
 import { AttachmentService } from "../app/services/attachmentService";
+import { AuditService } from "../app/services/auditService";
 import { ADMIN_EMAILS } from "../app/static";
 import type { Owner } from "../app/types";
 import * as schema from "../database/schema";
@@ -24,7 +25,13 @@ const requestHandler = createRequestHandler(
 export default {
   async fetch(request, env, ctx) {
     const db = drizzle(env.DB, { schema });
-    const dbRepository = createRepositoryFactory(db);
+
+    // Create audit service with direct database access (no cyclical dependency)
+    const auditService = new AuditService(db);
+
+    // Create repository factory with audit service
+    const dbRepository = createRepositoryFactory(db, auditService);
+
     const auth = getAuth({
       env,
       db,
@@ -37,13 +44,13 @@ export default {
       accountId: env.R2_ACCOUNT_ID,
       bucketName: "icona",
     });
-
     return requestHandler(request, {
       env,
       cloudflare: { env, ctx },
       db,
       dbRepository,
       attachmentService,
+      auditService,
       auth,
       getSession: async () => {
         const session = await auth.api.getSession({
@@ -78,6 +85,7 @@ declare module "react-router" {
     db: DrizzleD1Database<typeof schema>;
     dbRepository: RepositoryFactory;
     attachmentService: AttachmentService;
+    auditService: AuditService;
     auth: ReturnType<typeof getAuth>;
     getSession: () => Promise<{
       sessionUser: User;

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Form, Link, useLoaderData } from "react-router";
 
 import { useIsAdmin } from "~/hooks";
-import { owners } from "../../database/schema";
 import type { Route } from "./+types/owners";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -45,7 +44,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const phone = formData.get("phone") as string | null;
 
   try {
-    await context.db.insert(owners).values({
+    await context.dbRepository.getOwnersRepository().create({
       name,
       apartment_id,
       email,

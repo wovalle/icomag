@@ -1,3 +1,4 @@
+import type { User } from "better-auth";
 import {
   asc,
   desc,
@@ -5,6 +6,7 @@ import {
   SQL,
   sql,
   type ExtractTablesWithRelations,
+  type InferSelectModel,
 } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type {
@@ -22,6 +24,12 @@ export type PaginationParams = {
 
 export type WhereCondition = SQL | SQL[];
 
+export interface AuditContext {
+  user?: User | null;
+  request?: Request;
+  skipAudit?: boolean;
+}
+
 /**
  * Repository transaction type
  */
@@ -31,6 +39,11 @@ export type Transaction = SQLiteTransaction<
   typeof schema,
   ExtractTablesWithRelations<typeof schema>
 >;
+
+/**
+ * Type alias for inferring select model from SQLite table
+ */
+type InferredSelectModel<T extends SQLiteTable> = InferSelectModel<T>;
 
 /**
  * Database error class for handling database-specific errors
@@ -57,45 +70,17 @@ export class DrizzleRepository<T extends SQLiteTable> {
   /**
    * Find many records with optional filtering and pagination
    */
-  async findMany<TReturn = unknown>(params?: {
+  async findMany<TReturn = InferredSelectModel<T>>(params?: {
     where?: WhereCondition;
     pagination?: PaginationParams;
     orderBy?: { column: SQLiteColumn; direction: "asc" | "desc" }[];
-    with?: Record<string, unknown>;
     tx?: Transaction;
   }): Promise<TReturn[]> {
     try {
-      const { where, pagination, orderBy, with: relations, tx } = params || {};
+      const { where, pagination, orderBy, tx } = params || {};
       const dbInstance = tx || this.db;
 
-      // Check if we can use the prepared queries
-      if (dbInstance.query && this.table.$tableName) {
-        const queryBuilder =
-          dbInstance.query[
-            this.table.$tableName as keyof typeof dbInstance.query
-          ];
-
-        // Handle relations if available
-        if (
-          queryBuilder &&
-          relations &&
-          queryBuilder.findMany &&
-          typeof queryBuilder.findMany === "function"
-        ) {
-          return queryBuilder.findMany({
-            where: where as any,
-            limit: pagination?.limit,
-            offset:
-              pagination?.page && pagination?.limit
-                ? (pagination.page - 1) * pagination.limit
-                : undefined,
-            orderBy: orderBy as any,
-            with: relations as any,
-          }) as Promise<TReturn[]>;
-        }
-      }
-
-      // Fallback to basic query without relations
+      // Basic query without relations
       let queryBuilder = dbInstance.select().from(this.table).$dynamic();
 
       if (where) {
@@ -125,31 +110,13 @@ export class DrizzleRepository<T extends SQLiteTable> {
   /**
    * Find a single record by its ID or custom condition
    */
-  async findOne<TReturn = unknown>(params: {
+  async findOne<TReturn = InferredSelectModel<T>>(params: {
     where: WhereCondition;
-    with?: Record<string, unknown>;
     tx?: Transaction;
   }): Promise<TReturn | undefined> {
     try {
-      const { where, with: relations, tx } = params;
+      const { where, tx } = params;
       const dbInstance = tx || this.db;
-
-      let query =
-        dbInstance.query[
-          this.table.$tableName as keyof typeof dbInstance.query
-        ];
-
-      // Handle relations if available
-      if (
-        relations &&
-        query.findFirst &&
-        typeof query.findFirst === "function"
-      ) {
-        return query.findFirst({
-          where: where as any,
-          with: relations as any,
-        }) as Promise<TReturn | undefined>;
-      }
 
       // Basic query without relations
       const result = await dbInstance
@@ -167,10 +134,9 @@ export class DrizzleRepository<T extends SQLiteTable> {
   /**
    * Find a record by ID
    */
-  async findById<TReturn = unknown>(
+  async findById<TReturn = InferredSelectModel<T>>(
     id: number | string,
     params?: {
-      with?: Record<string, unknown>;
       tx?: Transaction;
     }
   ): Promise<TReturn | undefined> {
@@ -179,7 +145,6 @@ export class DrizzleRepository<T extends SQLiteTable> {
 
     return this.findOne<TReturn>({
       where: eq(pkColumn, id as any),
-      with: params?.with,
       tx: params?.tx,
     });
   }
@@ -187,7 +152,10 @@ export class DrizzleRepository<T extends SQLiteTable> {
   /**
    * Create a new record
    */
-  async create<TData extends Record<string, unknown>, TReturn = unknown>(
+  async create<
+    TData extends Record<string, unknown>,
+    TReturn = InferredSelectModel<T>
+  >(
     data: TData,
     options?: {
       tx?: Transaction;
@@ -259,6 +227,94 @@ export class DrizzleRepository<T extends SQLiteTable> {
       }
 
       return result as unknown as TReturn[];
+    } catch (err) {
+      throw this.handleError(err);
+    }
+  }
+
+  /**
+   * Upsert a record (insert or update if exists)
+   * Uses the primary key or specified conflict columns to determine existence
+   */
+  async upsert<
+    TData extends Record<string, unknown>,
+    TReturn = InferredSelectModel<T>
+  >(
+    data: TData,
+    options?: {
+      tx?: Transaction;
+      conflictColumns?: SQLiteColumn[];
+    }
+  ): Promise<TReturn> {
+    try {
+      // Determine conflict columns - use primary key if not specified
+      const conflictColumns = options?.conflictColumns || [
+        this.getPrimaryKeyColumn(),
+      ];
+
+      // Build where condition to check if record exists
+      const whereConditions = conflictColumns.map((col) => {
+        const value = data[col.name as keyof TData];
+        if (value === undefined) {
+          throw new Error(
+            `Upsert data must include value for conflict column: ${col.name}`
+          );
+        }
+        return eq(col, value as any);
+      });
+
+      const whereCondition =
+        whereConditions.length === 1 ? whereConditions[0] : whereConditions;
+
+      // Check if record exists
+      const existingRecord = await this.findOne<TReturn>({
+        where: whereCondition,
+        tx: options?.tx,
+      });
+
+      if (existingRecord) {
+        // Record exists, update it
+        // For primary key updates, use the primary key value
+        const pkColumn = this.getPrimaryKeyColumn();
+        const pkValue = existingRecord[pkColumn.name as keyof TReturn];
+
+        return this.update<TData, TReturn>(pkValue as any, data, {
+          tx: options?.tx,
+        });
+      } else {
+        // Record doesn't exist, create it
+        return this.create<TData, TReturn>(data, {
+          tx: options?.tx,
+        });
+      }
+    } catch (err) {
+      throw this.handleError(err);
+    }
+  }
+
+  /**
+   * Upsert multiple records
+   */
+  async upsertMany<
+    TData extends Record<string, unknown>,
+    TReturn = InferredSelectModel<T>
+  >(
+    data: TData[],
+    options?: {
+      tx?: Transaction;
+      conflictColumns?: SQLiteColumn[];
+    }
+  ): Promise<TReturn[]> {
+    try {
+      const results: TReturn[] = [];
+
+      // Process each record individually to maintain proper lifecycle hooks
+      for (const item of data) {
+        const result = await this.upsert<TData, TReturn>(item, options);
+        results.push(result);
+      }
+
+      return results;
     } catch (err) {
       throw this.handleError(err);
     }
@@ -492,7 +548,9 @@ export class DrizzleRepository<T extends SQLiteTable> {
 
     if (!pkColumn) {
       throw new Error(
-        `No primary key found for table ${this.table.$tableName}`
+        `No primary key found for table ${
+          (this.table as any).$inferTable?.name || "unknown"
+        }`
       );
     }
 

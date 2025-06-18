@@ -1,55 +1,110 @@
 import { DrizzleD1Database } from "drizzle-orm/d1";
+import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import * as schema from "../../database/schema";
-import { DrizzleRepository } from "../drizzleRepository";
+import { AuditService } from "../services/auditService";
+import {
+  AuditLogRepository,
+  type AuditLogEntityType,
+} from "./AuditLogRepository";
+import { AuditableDrizzleRepository } from "./AuditableDrizzleRepository";
 import { KVStoreRepository } from "./KVStoreRepository";
+import { TransactionRepository } from "./TransactionRepository";
 import { TransactionTagsRepository } from "./TransactionTagsRepository";
+
+/**
+ * Utility type to extract only SQLiteTable types from schema
+ */
+type SchemaTables = {
+  [K in keyof typeof schema]: (typeof schema)[K] extends SQLiteTable
+    ? (typeof schema)[K]
+    : never;
+}[keyof typeof schema];
 
 /**
  * Factory for creating type-safe repositories for each table
  */
 export class RepositoryFactory {
   private db: DrizzleD1Database<typeof schema>;
+  protected auditService: AuditService;
 
-  constructor(db: DrizzleD1Database<typeof schema>) {
+  constructor(
+    db: DrizzleD1Database<typeof schema>,
+    auditService: AuditService
+  ) {
     this.db = db;
+    this.auditService = auditService;
   }
 
   // Type-safe factory methods for each table
   getOwnersRepository() {
-    return new DrizzleRepository(this.db, schema.owners);
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.owners,
+      this.auditService,
+      "OWNER"
+    );
   }
 
   getOwnerPatternsRepository() {
-    return new DrizzleRepository(this.db, schema.ownerPatterns);
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.ownerPatterns,
+      this.auditService,
+      "PATTERN"
+    );
   }
 
   getTransactionBatchesRepository() {
-    return new DrizzleRepository(this.db, schema.transactionBatches);
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.transactionBatches,
+      this.auditService,
+      "BATCH"
+    );
   }
 
   getTransactionsRepository() {
-    return new DrizzleRepository(this.db, schema.transactions);
+    return new TransactionRepository(this.db, this.auditService);
   }
 
   getTransactionTagsRepository() {
-    return new TransactionTagsRepository(this.db);
+    return new TransactionTagsRepository(this.db, this.auditService);
   }
 
   getTagPatternsRepository() {
-    return new DrizzleRepository(this.db, schema.tagPatterns);
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.tagPatterns,
+      this.auditService,
+      "PATTERN"
+    );
   }
 
   getTransactionToTagsRepository() {
-    return new DrizzleRepository(this.db, schema.transactionToTags);
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.transactionToTags,
+      this.auditService,
+      "TRANSACTION_TAG"
+    );
   }
 
   getKVStoreRepository() {
-    return new KVStoreRepository(this.db);
+    return new KVStoreRepository(this.db, this.auditService);
   }
 
-  // Generic repository for any table (less type-safe)
-  forTable<T extends (typeof schema)[keyof typeof schema]>(table: T) {
-    return new DrizzleRepository<T>(this.db, table);
+  getAuditLogRepository() {
+    return new AuditLogRepository(this.db);
+  }
+
+  // Generic repository for any table (type-safe)
+  forTable<T extends SchemaTables>(table: T, entityType: AuditLogEntityType) {
+    return new AuditableDrizzleRepository(
+      this.db,
+      table,
+      this.auditService,
+      entityType
+    );
   }
 
   /**
@@ -66,7 +121,8 @@ export class RepositoryFactory {
 }
 
 export const createRepositoryFactory = (
-  db: DrizzleD1Database<typeof schema>
+  db: DrizzleD1Database<typeof schema>,
+  auditService: AuditService
 ) => {
-  return new RepositoryFactory(db);
+  return new RepositoryFactory(db, auditService);
 };

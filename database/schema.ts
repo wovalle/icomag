@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import { user } from "./auth-schema";
 
 export { account, session, user, verification } from "./auth-schema";
 
@@ -164,6 +165,23 @@ export const kvStore = sqliteTable("kv_store", {
     .$defaultFn(() => Math.floor(Date.now() / 1000)),
 });
 
+// Audit logs table to track all system events and entity changes
+export const auditLogs = sqliteTable("audit_logs", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  event_type: text().notNull(), // 'CREATE', 'UPDATE', 'DELETE', 'SIGN_IN', 'SIGN_OUT', etc.
+  entity_type: text().notNull(), // 'OWNER', 'TRANSACTION', 'TAG', 'SYSTEM', etc.
+  entity_id: text(), // ID of the affected entity (if applicable)
+  user_id: text().references(() => user.id), // User who performed the action
+  user_email: text(), // Email of the user (for quick reference)
+  details: text(), // JSON string with additional details (old/new values, etc.)
+  ip_address: text(), // IP address of the request
+  user_agent: text(), // User agent of the request
+  is_system_event: integer().default(0), // 1 for system events (login/logout), 0 for entity changes
+  created_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
 // Define relations for owners
 export const ownersRelations = relations(owners, ({ many }) => ({
   transactions: many(transactions),
@@ -246,5 +264,13 @@ export const tagPatternsRelations = relations(tagPatterns, ({ one }) => ({
   tag: one(transactionTags, {
     fields: [tagPatterns.tag_id],
     references: [transactionTags.id],
+  }),
+}));
+
+// Define relations for audit logs
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(user, {
+    fields: [auditLogs.user_id],
+    references: [user.id],
   }),
 }));
