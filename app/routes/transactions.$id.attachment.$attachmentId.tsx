@@ -15,7 +15,7 @@ export const loader = async ({ params, context }: Route.LoaderArgs) => {
   const attachmentIdNum = parseInt(attachmentId);
 
   // Verify the transaction exists and the attachment belongs to it
-  const transactionService = new TransactionService(context.db);
+  const transactionService = new TransactionService(context.dbRepository);
   const transaction = await transactionService.getTransactionById(
     transactionId
   );

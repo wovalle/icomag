@@ -124,9 +124,6 @@ export class AuditLogRepository extends DrizzleRepository<
       where: whereCondition,
       pagination,
       orderBy: [{ column: schema.auditLogs.created_at, direction: "desc" }],
-      with: {
-        user: true,
-      },
     });
   }
 
@@ -137,9 +134,6 @@ export class AuditLogRepository extends DrizzleRepository<
         eq(schema.auditLogs.entity_id, entityId)
       ),
       orderBy: [{ column: schema.auditLogs.created_at, direction: "desc" }],
-      with: {
-        user: true,
-      },
     });
   }
 
@@ -156,9 +150,6 @@ export class AuditLogRepository extends DrizzleRepository<
       where: eq(schema.auditLogs.is_system_event, 1),
       pagination: { limit },
       orderBy: [{ column: schema.auditLogs.created_at, direction: "desc" }],
-      with: {
-        user: true,
-      },
     });
   }
 }

@@ -482,9 +482,6 @@ export class TransactionService {
         .getTransactionTagsRepository()
         .findMany({
           orderBy: [{ column: schema.transactionTags.name, direction: "asc" }],
-          with: {
-            parentTag: true,
-          },
         });
 
       return {

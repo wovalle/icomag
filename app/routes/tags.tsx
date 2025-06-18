@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Form, Link, useFetcher, useLoaderData } from "react-router";
 import { useIsAdmin } from "~/hooks";
+import * as schema from "../../database/schema";
 import type { Tag } from "../types";
 import type { Route } from "./+types/tags";
 
@@ -9,7 +10,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     const session = await context.getSession();
     const tagsRepository = context.dbRepository.getTransactionTagsRepository();
     const tags = await tagsRepository.findMany<Tag>({
-      orderBy: [{ column: "name", direction: "asc" }],
+      orderBy: [{ column: schema.transactionTags.name, direction: "asc" }],
     });
     return {
       tags,
