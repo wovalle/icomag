@@ -1,5 +1,6 @@
 import { Link, useLoaderData } from "react-router";
 import { useIsAdmin } from "~/hooks";
+import { transactionBatches } from "../../database/schema";
 import type { Route } from "./+types/batches";
 
 type BatchLoaderData = {
@@ -11,10 +12,14 @@ type BatchLoaderData = {
 export async function loader({ context }: Route.LoaderArgs) {
   try {
     const session = await context.getSession();
-    const batches = await context.db.query.transactionBatches.findMany({
-      orderBy: (transactionBatches, { desc }) => [
-        desc(transactionBatches.processed_at),
-      ],
+
+    // Get repository
+    const transactionBatchesRepo =
+      context.dbRepository.getTransactionBatchesRepository();
+
+    // Load batches using repository with ordering
+    const batches = await transactionBatchesRepo.findMany({
+      orderBy: [{ column: transactionBatches.processed_at, direction: "desc" }],
     });
 
     return {

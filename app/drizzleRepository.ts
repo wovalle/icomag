@@ -111,7 +111,7 @@ export class DrizzleRepository<T extends SQLiteTable> {
    * Find a single record by its ID or custom condition
    */
   async findOne<TReturn = InferredSelectModel<T>>(params: {
-    where: WhereCondition;
+    where: WhereCondition | undefined;
     tx?: Transaction;
   }): Promise<TReturn | undefined> {
     try {

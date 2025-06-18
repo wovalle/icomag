@@ -28,7 +28,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   }
 
   try {
-    const owner = await context.db.query.owners.findFirst({
+    // Get repository
+    const ownersRepo = context.dbRepository.getOwnersRepository();
+
+    // Find owner using repository
+    const owner = await ownersRepo.findOne({
       where: eq(owners.id, ownerId),
     });
 

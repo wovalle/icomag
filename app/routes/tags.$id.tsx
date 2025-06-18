@@ -26,31 +26,35 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   try {
     const session = await context.getSession();
-    const tag = await context.db.query.transactionTags.findFirst({
-      where: eq(transactionTags.id, tagId),
-      with: {
-        parentTag: true,
-      },
-    });
+
+    // Get repositories
+    const transactionTagsRepo =
+      context.dbRepository.getTransactionTagsRepository();
+    const tagPatternsRepo = context.dbRepository.getTagPatternsRepository();
+
+    // Find tag using repository method with parent tag relation
+    const tag = await transactionTagsRepo.getTransactionTagsWithParentTag(
+      tagId
+    );
 
     if (!tag) {
       // Don't catch this error, let it propagate to the router
       throw new Response("Tag not found", { status: 404 });
     }
 
-    // Get all tags for the parent tag selection
-    const allTags = await context.db.query.transactionTags.findMany({
-      where: (tags) => ne(tags.id, tagId), // Exclude current tag
-      orderBy: (tags, { asc }) => [asc(tags.name)],
+    // Get all tags for the parent tag selection using repository
+    const allTags = await transactionTagsRepo.findMany({
+      where: ne(transactionTags.id, tagId), // Exclude current tag
+      orderBy: [{ column: transactionTags.name, direction: "asc" }],
     });
 
-    // Get recognition patterns for this tag
-    const patterns = await context.db.query.tagPatterns.findMany({
+    // Get recognition patterns for this tag using repository
+    const patterns = await tagPatternsRepo.findMany({
       where: eq(tagPatterns.tag_id, tagId),
-      orderBy: (patterns, { desc }) => [desc(patterns.created_at)],
+      orderBy: [{ column: tagPatterns.created_at, direction: "desc" }],
     });
 
-    // Get recent transactions for this tag
+    // Get recent transactions for this tag - need complex join, keep raw query for now
     const relatedTransactions = await context.db
       .select()
       .from(transactionToTags)
@@ -93,6 +97,9 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
 export async function action({ params, context, request }: Route.ActionArgs) {
   const session = await context.getSession();
+  // Get repositories
+  const transactionTagsRepo =
+    context.dbRepository.getTransactionTagsRepository();
 
   // Check if user is admin
   if (!session?.isAdmin) {
@@ -122,16 +129,13 @@ export async function action({ params, context, request }: Route.ActionArgs) {
     }
 
     try {
-      await context.db
-        .update(transactionTags)
-        .set({
-          name,
-          description,
-          parent_id: parentId ? parseInt(parentId) : null,
-          color,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactionTags.id, id));
+      // Update tag using repository
+      await transactionTagsRepo.update(id, {
+        name,
+        description,
+        parent_id: parentId ? parseInt(parentId) : null,
+        color,
+      });
 
       return { success: true, redirect: `/tags/${id}`, action: "edit" };
     } catch (error) {
@@ -142,9 +146,8 @@ export async function action({ params, context, request }: Route.ActionArgs) {
 
   if (method === "delete") {
     try {
-      await context.db
-        .delete(transactionTags)
-        .where(eq(transactionTags.id, id));
+      // Delete tag using repository
+      await transactionTagsRepo.delete(id);
       return { success: true, redirect: "/tags", action: "delete" };
     } catch (error) {
       console.error("Error deleting tag:", error);

@@ -36,16 +36,15 @@ export async function loader({ context, params }: Route.LoaderArgs) {
   try {
     const session = await context.getSession();
 
-    // Load the batch
-    const batch = await context.db.query.transactionBatches.findFirst({
+    // Get repositories
+    const transactionBatchesRepo =
+      context.dbRepository.getTransactionBatchesRepository();
+    const transactionsRepo = context.dbRepository.getTransactionsRepository();
+
+    // Load the batch using repository
+    const batch = await transactionBatchesRepo.findOne({
       where: eq(transactionBatches.id, batchId),
     });
-
-    const klk = await context.dbRepository
-      .getTransactionBatchesRepository()
-      .findOne({
-        where: eq(transactionBatches.id, batchId),
-      });
 
     if (!batch) {
       return {
@@ -56,14 +55,10 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       };
     }
 
-    // Load all transactions from this batch
-    const batchTransactions = await context.db.query.transactions.findMany({
-      where: eq(transactions.batch_id, batchId),
-      orderBy: (transactions, { desc }) => [desc(transactions.date)],
-      with: {
-        owner: true,
-      },
-    });
+    // Load all transactions from this batch using repository
+    const batchTransactions = await transactionsRepo.findByBatchIdWithOwner(
+      batchId
+    );
 
     return {
       batch,
@@ -104,14 +99,21 @@ export async function action({ context, params, request }: Route.ActionArgs) {
   }
 
   try {
-    // Start a transaction to ensure both operations complete or fail together
-    await context.db.batch([
-      context.db.delete(transactions).where(eq(transactions.batch_id, batchId)),
+    // Get repositories
+    const transactionBatchesRepo =
+      context.dbRepository.getTransactionBatchesRepository();
+    const transactionsRepo = context.dbRepository.getTransactionsRepository();
 
-      context.db
-        .delete(transactionBatches)
-        .where(eq(transactionBatches.id, batchId)),
-    ]);
+    // Use repository transaction to ensure both operations complete or fail together
+    await context.dbRepository.transaction(async (tx) => {
+      // Delete all transactions in this batch first
+      await transactionsRepo.deleteMany(eq(transactions.batch_id, batchId), {
+        tx,
+      });
+
+      // Then delete the batch itself
+      await transactionBatchesRepo.delete(batchId, { tx });
+    });
 
     return { success: true };
   } catch (error) {

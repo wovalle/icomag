@@ -23,6 +23,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return { success: false, error: "Invalid tag ID" };
   }
 
+  // Get repositories
+  const tagPatternsRepo = context.dbRepository.getTagPatternsRepository();
+  const transactionsRepo = context.dbRepository.getTransactionsRepository();
+  const transactionToTagsRepo =
+    context.dbRepository.getTransactionToTagsRepository();
+
   // Get the form data
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
@@ -46,20 +52,18 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           return { success: false, error: "Invalid regex pattern" };
         }
 
-        await context.db.insert(tagPatterns).values({
+        // Create pattern using repository
+        await tagPatternsRepo.create({
           tag_id: tagId,
           pattern,
           description,
           is_active: 1,
-          created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
         });
 
         // If applyToExisting is true, assign the tag to matching transactions
         if (applyToExisting) {
-          // Get all transactions
-          const allTransactions =
-            await context.db.query.transactions.findMany();
+          // Get all transactions using repository
+          const allTransactions = await transactionsRepo.findMany();
 
           // Create a RegExp object for the pattern
           const regex = new RegExp(pattern);
@@ -73,21 +77,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
           // For each matching transaction, add this tag
           for (const transaction of matchingTransactions) {
-            // Check if the tag is already associated with this transaction
-            const existingLink =
-              await context.db.query.transactionToTags.findFirst({
-                where: and(
-                  eq(transactionToTags.transaction_id, transaction.id),
-                  eq(transactionToTags.tag_id, tagId)
-                ),
-              });
+            // Check if the tag is already associated with this transaction using repository
+            const existingLink = await transactionToTagsRepo.findOne({
+              where: and(
+                eq(transactionToTags.transaction_id, transaction.id),
+                eq(transactionToTags.tag_id, tagId)
+              ),
+            });
 
             if (!existingLink) {
-              // Add the tag to the transaction
-              await context.db.insert(transactionToTags).values({
+              // Add the tag to the transaction using repository
+              await transactionToTagsRepo.create({
                 transaction_id: transaction.id,
                 tag_id: tagId,
-                created_at: Math.floor(Date.now() / 1000),
               });
             }
           }
@@ -104,7 +106,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const patternId = parseInt(formData.get("patternId")?.toString() || "0");
 
       try {
-        const pattern = await context.db.query.tagPatterns.findFirst({
+        // Find pattern using repository
+        const pattern = await tagPatternsRepo.findOne({
           where: and(
             eq(tagPatterns.id, patternId),
             eq(tagPatterns.tag_id, tagId)
@@ -115,13 +118,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           return { success: false, error: "Recognition pattern not found" };
         }
 
-        await context.db
-          .update(tagPatterns)
-          .set({
-            is_active: pattern.is_active ? 0 : 1,
-            updated_at: Math.floor(Date.now() / 1000),
-          })
-          .where(eq(tagPatterns.id, patternId));
+        // Update pattern using repository
+        await tagPatternsRepo.update(patternId, {
+          is_active: pattern.is_active ? 0 : 1,
+        });
 
         return redirect(`/tags/${tagId}`);
       } catch (error) {
@@ -134,11 +134,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const patternId = parseInt(formData.get("patternId")?.toString() || "0");
 
       try {
-        await context.db
-          .delete(tagPatterns)
-          .where(
-            and(eq(tagPatterns.id, patternId), eq(tagPatterns.tag_id, tagId))
-          );
+        // Delete pattern using repository
+        await tagPatternsRepo.delete(patternId);
 
         return redirect(`/tags/${tagId}`);
       } catch (error) {

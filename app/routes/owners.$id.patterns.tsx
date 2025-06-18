@@ -22,9 +22,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return { success: false, error: "Invalid owner ID" };
   }
 
-  // Get the form data
+  // Get form data
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
+
+  // Get repositories
+  const ownerPatternsRepo = context.dbRepository.getOwnerPatternsRepository();
+  const transactionsRepo = context.dbRepository.getTransactionsRepository();
 
   // Handle different operations based on intent
   switch (intent) {
@@ -46,41 +50,38 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           return { success: false, error: "Invalid regex pattern" };
         }
 
-        await context.db.insert(ownerPatterns).values({
+        // Create the pattern using repository
+        await ownerPatternsRepo.create({
           owner_id: ownerId,
           pattern,
           description,
           is_active: 1,
-          created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
         });
 
         // If applyToExisting is true, assign the owner to matching transactions
         if (applyToExisting) {
-          // Get all transactions
-          const allTransactions = await context.db.query.transactions.findMany({
-            where: onlyNullOwners ? isNull(transactions.owner_id) : undefined,
-          });
+          // Get all transactions that match the criteria
+          const allTransactions = onlyNullOwners
+            ? await transactionsRepo.findMany({
+                where: isNull(transactions.owner_id),
+              })
+            : await transactionsRepo.findMany();
 
           // Create a RegExp object for the pattern
           const regex = new RegExp(pattern);
 
           // Filter transactions that match the pattern
           const matchingTransactions = allTransactions.filter((transaction) => {
-            const description =
+            const transactionDescription =
               transaction.description || transaction.bank_description || "";
-            return regex.test(description);
+            return regex.test(transactionDescription);
           });
 
           // Update transactions to set this owner
           for (const transaction of matchingTransactions) {
-            await context.db
-              .update(transactions)
-              .set({
-                owner_id: ownerId,
-                updated_at: Math.floor(Date.now() / 1000),
-              })
-              .where(eq(transactions.id, transaction.id));
+            await transactionsRepo.update(transaction.id, {
+              owner_id: ownerId,
+            });
           }
         }
 
@@ -95,7 +96,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const patternId = parseInt(formData.get("patternId")?.toString() || "0");
 
       try {
-        const pattern = await context.db.query.ownerPatterns.findFirst({
+        // Find the pattern using repository
+        const pattern = await ownerPatternsRepo.findOne({
           where: and(
             eq(ownerPatterns.id, patternId),
             eq(ownerPatterns.owner_id, ownerId)
@@ -106,13 +108,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           return { success: false, error: "Recognition pattern not found" };
         }
 
-        await context.db
-          .update(ownerPatterns)
-          .set({
-            is_active: pattern.is_active ? 0 : 1,
-            updated_at: Math.floor(Date.now() / 1000),
-          })
-          .where(eq(ownerPatterns.id, patternId));
+        // Toggle the pattern status using repository
+        await ownerPatternsRepo.update(patternId, {
+          is_active: pattern.is_active ? 0 : 1,
+        });
 
         return redirect(`/owners/${ownerId}`);
       } catch (error) {
@@ -125,14 +124,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const patternId = parseInt(formData.get("patternId")?.toString() || "0");
 
       try {
-        await context.db
-          .delete(ownerPatterns)
-          .where(
-            and(
-              eq(ownerPatterns.id, patternId),
-              eq(ownerPatterns.owner_id, ownerId)
-            )
-          );
+        // Delete the pattern using repository
+        await ownerPatternsRepo.delete(patternId);
 
         return redirect(`/owners/${ownerId}`);
       } catch (error) {

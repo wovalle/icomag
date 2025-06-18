@@ -2,13 +2,19 @@ import { useState } from "react";
 import { Form, Link, useLoaderData } from "react-router";
 
 import { useIsAdmin } from "~/hooks";
+import { owners } from "../../database/schema";
 import type { Route } from "./+types/owners";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   try {
     const session = await context.getSession();
-    const ownersList = await context.db.query.owners.findMany({
-      orderBy: (owners, { desc }) => [desc(owners.created_at)],
+
+    // Get repository
+    const ownersRepo = context.dbRepository.getOwnersRepository();
+
+    // Get owners using repository
+    const ownersList = await ownersRepo.findMany({
+      orderBy: [{ column: owners.created_at, direction: "desc" }],
     });
 
     return {

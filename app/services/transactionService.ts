@@ -139,7 +139,7 @@ export class TransactionService {
       // For each tag ID, check if it's already assigned to the transaction
       for (const tagId of tagIds) {
         // Check if the tag is already assigned to the transaction
-        const whereCondition: SQL<unknown> = and(
+        const whereCondition = and(
           eq(schema.transactionToTags.transaction_id, transactionId),
           eq(schema.transactionToTags.tag_id, tagId)
         );

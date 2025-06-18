@@ -8,6 +8,7 @@ import {
   useSubmit,
 } from "react-router";
 import {
+  owners,
   transactionTags,
   transactionToTags,
   transactions,
@@ -33,10 +34,18 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     // Get current user info
     const userInfo = await context.getSession();
 
-    // Fetch transaction with owner and attachments
-    const transaction = await context.dbRepository
-      .getTransactionsRepository()
-      .findOneWithOwnerAndAttachments(eq(transactions.id, id));
+    // Get repositories
+    const transactionsRepo = context.dbRepository.getTransactionsRepository();
+    const ownersRepo = context.dbRepository.getOwnersRepository();
+    const transactionTagsRepo = context.dbRepository.forTable(
+      transactionTags,
+      "TAG"
+    );
+
+    // Fetch transaction with owner and attachments using repository
+    const transaction = await transactionsRepo.findOneWithOwnerAndAttachments(
+      eq(transactions.id, id)
+    );
 
     if (!transaction) {
       return {
@@ -48,7 +57,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       };
     }
 
-    // Get tags for this transaction
+    // Get tags for this transaction - complex join, keep raw query for now
     const transactionTagsList = await context.db
       .select({
         id: transactionTags.id,
@@ -62,14 +71,14 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       )
       .where(eq(transactionToTags.transaction_id, id));
 
-    // Get all owners
-    const ownersList = await context.db.query.owners.findMany({
-      orderBy: (owners, { asc }) => [asc(owners.name)],
+    // Get all owners using repository
+    const ownersList = await ownersRepo.findMany({
+      orderBy: [{ column: owners.name, direction: "asc" }],
     });
 
-    // Get all tags
-    const allTagsList = await context.db.query.transactionTags.findMany({
-      orderBy: (transactionTags, { asc }) => [asc(transactionTags.name)],
+    // Get all tags using repository
+    const allTagsList = await transactionTagsRepo.findMany({
+      orderBy: [{ column: transactionTags.name, direction: "asc" }],
     });
 
     return {
@@ -113,13 +122,19 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     return { success: false, error: "Invalid transaction ID" };
   }
 
+  // Get repositories
+  const transactionsRepo = context.dbRepository.getTransactionsRepository();
+  const transactionToTagsRepo =
+    context.dbRepository.getTransactionToTagsRepository();
+
   if (intent === "updateDescription") {
     const description = formData.get("description") as string;
 
     try {
-      await context.dbRepository
-        .getTransactionsRepository()
-        .update(id, { description, updated_at: Math.floor(Date.now() / 1000) });
+      // Update transaction using repository
+      await transactionsRepo.update(id, {
+        description,
+      });
 
       return { success: true };
     } catch (error) {
@@ -136,13 +151,10 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         : parseInt(formData.get("owner_id") as string);
 
     try {
-      await context.db
-        .update(transactions)
-        .set({
-          owner_id,
-          updated_at: Math.floor(Date.now() / 1000),
-        })
-        .where(eq(transactions.id, id));
+      // Update transaction owner using repository
+      await transactionsRepo.update(id, {
+        owner_id,
+      });
 
       return { success: true };
     } catch (error) {
@@ -153,23 +165,19 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     const tag_id = parseInt(formData.get("tag_id") as string);
 
     try {
-      // Check if the tag is already assigned to the transaction
-      const existingTag = await context.db
-        .select()
-        .from(transactionToTags)
-        .where(
-          and(
-            eq(transactionToTags.transaction_id, id),
-            eq(transactionToTags.tag_id, tag_id)
-          )
-        )
-        .limit(1);
+      // Check if the tag is already assigned to the transaction using repository
+      const existingTag = await transactionToTagsRepo.findOne({
+        where: and(
+          eq(transactionToTags.transaction_id, id),
+          eq(transactionToTags.tag_id, tag_id)
+        ),
+      });
 
-      if (existingTag.length === 0) {
-        await context.dbRepository.getTransactionTagsRepository().create({
+      if (!existingTag) {
+        // Create tag association using repository
+        await transactionToTagsRepo.create({
           transaction_id: id,
           tag_id,
-          created_at: Math.floor(Date.now() / 1000),
         });
       }
 
@@ -182,14 +190,17 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     const tag_id = parseInt(formData.get("tag_id") as string);
 
     try {
-      await context.db
-        .delete(transactionToTags)
-        .where(
-          and(
-            eq(transactionToTags.transaction_id, id),
-            eq(transactionToTags.tag_id, tag_id)
-          )
-        );
+      // Find and delete the specific tag association
+      const tagAssociation = await transactionToTagsRepo.findOne({
+        where: and(
+          eq(transactionToTags.transaction_id, id),
+          eq(transactionToTags.tag_id, tag_id)
+        ),
+      });
+
+      if (tagAssociation) {
+        await transactionToTagsRepo.delete(tagAssociation.id);
+      }
 
       return { success: true };
     } catch (error) {

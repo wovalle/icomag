@@ -16,7 +16,14 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   try {
     const session = await context.getSession();
-    const owner = await context.db.query.owners.findFirst({
+
+    // Get repositories
+    const ownersRepo = context.dbRepository.getOwnersRepository();
+    const ownerPatternsRepo = context.dbRepository.getOwnerPatternsRepository();
+    const transactionsRepo = context.dbRepository.getTransactionsRepository();
+
+    // Find owner using repository
+    const owner = await ownersRepo.findOne({
       where: eq(owners.id, ownerId),
     });
 
@@ -25,20 +32,20 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       throw new Response("Owner not found", { status: 404 });
     }
 
-    // Get all recognition patterns for this owner
-    const patterns = await context.db.query.ownerPatterns.findMany({
+    // Get all recognition patterns for this owner using repository
+    const patterns = await ownerPatternsRepo.findMany({
       where: eq(ownerPatterns.owner_id, ownerId),
-      orderBy: (patterns, { desc }) => [desc(patterns.created_at)],
+      orderBy: [{ column: ownerPatterns.created_at, direction: "desc" }],
     });
 
-    // Get recent transactions for this owner
-    const recentTransactions = await context.db.query.transactions.findMany({
+    // Get recent transactions for this owner using repository
+    const recentTransactions = await transactionsRepo.findMany({
       where: and(
         eq(transactions.owner_id, ownerId),
         eq(transactions.is_duplicate, 0)
       ),
-      orderBy: (transactions, { desc }) => [desc(transactions.date)],
-      limit: 5,
+      orderBy: [{ column: transactions.date, direction: "desc" }],
+      pagination: { limit: 5 },
     });
 
     return {

@@ -29,7 +29,6 @@ export class AuditableDrizzleRepository<
   protected async afterCreate(data: unknown): Promise<void> {
     await super.afterCreate(data);
 
-    console.log("afterCreate", data);
     // Extract ID from the created entity
     const entityId = (data as any)?.id?.toString();
     if (entityId) {
@@ -47,8 +46,6 @@ export class AuditableDrizzleRepository<
 
   protected async afterUpdate(data: unknown): Promise<void> {
     await super.afterUpdate(data);
-
-    console.log("afterUpdate", data);
 
     // Extract ID and data from the updated entity
     const entityId = (data as any)?.id?.toString();
@@ -70,7 +67,6 @@ export class AuditableDrizzleRepository<
 
   protected async afterDelete(data: Record<string, unknown>): Promise<void> {
     await super.afterDelete(data);
-    console.log("afterDelete", data);
 
     const entityId = (data as any)?.id?.toString();
     if (entityId) {

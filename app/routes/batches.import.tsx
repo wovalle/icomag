@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { useState } from "react";
 import { Form, redirect, useLoaderData } from "react-router";
-import { transactionBatches, transactions } from "../../database/schema";
+import { transactions } from "../../database/schema";
 import { parsePopularTransactionsFile } from "../services/bankFileParser";
 import type { Route } from "./+types/batches.import";
 
@@ -61,23 +61,25 @@ export async function action({ request, context }: Route.ActionArgs) {
       };
     }
 
-    // Create a new batch record
-    const [batchRecord] = await context.db
-      .insert(transactionBatches)
-      .values({
-        filename: filename!,
-        original_filename: originalFilename!,
-        processed_at: Math.floor(Date.now() / 1000),
-        total_transactions: parsedTransactions.length,
-        new_transactions: 0, // To be updated later
-        duplicated_transactions: 0, // To be updated later
-        created_at: Math.floor(Date.now() / 1000),
-      })
-      .returning();
+    // Get repositories
+    const transactionBatchesRepo =
+      context.dbRepository.getTransactionBatchesRepository();
+    const ownerPatternsRepo = context.dbRepository.getOwnerPatternsRepository();
+    const transactionsRepo = context.dbRepository.getTransactionsRepository();
 
-    // Get all owner patterns for pattern matching
+    // Create a new batch record using repository
+    const batchRecord = await transactionBatchesRepo.create({
+      filename: filename!,
+      original_filename: originalFilename!,
+      processed_at: Math.floor(Date.now() / 1000),
+      total_transactions: parsedTransactions.length,
+      new_transactions: 0, // To be updated later
+      duplicated_transactions: 0, // To be updated later
+    });
+
+    // Get all owner patterns for pattern matching using repository
     const allOwnerPatterns = usePatternMatching
-      ? await context.db.query.ownerPatterns.findMany()
+      ? await ownerPatternsRepo.findMany()
       : [];
 
     // Process each transaction
@@ -86,18 +88,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     for (const transaction of parsedTransactions) {
       // Check if transaction already exists by comparing date, amount, type, and reference/serial
-      const existingTransaction = await context.db.query.transactions.findFirst(
-        {
-          where: and(
-            eq(transactions.date, transaction.date),
-            eq(transactions.amount, transaction.amount),
-            eq(transactions.type, transaction.type),
-            transaction.serial
-              ? eq(transactions.serial, transaction.serial)
-              : undefined
-          ),
-        }
-      );
+      const existingTransaction = await transactionsRepo.findOne({
+        where: and(
+          eq(transactions.date, transaction.date),
+          eq(transactions.amount, transaction.amount),
+          eq(transactions.type, transaction.type),
+          transaction.serial
+            ? eq(transactions.serial, transaction.serial)
+            : undefined
+        ),
+      });
 
       // Determine owner_id through auto-matching or pattern matching
       let owner_id = null;
@@ -118,56 +118,43 @@ export async function action({ request, context }: Route.ActionArgs) {
       if (existingTransaction) {
         // If transaction exists, mark as duplicate but still add to the batch
         duplicatedTransactions++;
-        const [duplicateTransaction] = await context.db
-          .insert(transactions)
-          .values({
-            type: transaction.type,
-            amount: transaction.amount,
-            description: existingTransaction.description, // Keep the existing description
-            date: transaction.date,
-            owner_id: existingTransaction.owner_id, // Keep the existing owner
-            reference: transaction.reference,
-            category: existingTransaction.category, // Keep the existing category
-            serial: transaction.serial,
-            bank_description: transaction.bank_description,
-            batch_id: batchRecord.id,
-            is_duplicate: 1, // Mark as duplicate
-            created_at: Math.floor(Date.now() / 1000),
-            updated_at: Math.floor(Date.now() / 1000),
-          })
-          .returning();
+        await transactionsRepo.create({
+          type: transaction.type,
+          amount: transaction.amount,
+          description: existingTransaction.description, // Keep the existing description
+          date: transaction.date,
+          owner_id: existingTransaction.owner_id, // Keep the existing owner
+          reference: transaction.reference,
+          category: existingTransaction.category, // Keep the existing category
+          serial: transaction.serial,
+          bank_description: transaction.bank_description,
+          batch_id: batchRecord.id,
+          is_duplicate: 1, // Mark as duplicate
+        });
       } else {
         // Create new transaction
         newTransactions++;
-        const [newTransaction] = await context.db
-          .insert(transactions)
-          .values({
-            type: transaction.type,
-            amount: transaction.amount,
-            description: transaction.description, // Initially use bank description
-            date: transaction.date,
-            owner_id,
-            reference: transaction.reference,
-            category: null,
-            serial: transaction.serial,
-            bank_description: transaction.bank_description,
-            batch_id: batchRecord.id,
-            is_duplicate: 0, // Not a duplicate
-            created_at: Math.floor(Date.now() / 1000),
-            updated_at: Math.floor(Date.now() / 1000),
-          })
-          .returning();
+        await transactionsRepo.create({
+          type: transaction.type,
+          amount: transaction.amount,
+          description: transaction.description, // Initially use bank description
+          date: transaction.date,
+          owner_id,
+          reference: transaction.reference,
+          category: null,
+          serial: transaction.serial,
+          bank_description: transaction.bank_description,
+          batch_id: batchRecord.id,
+          is_duplicate: 0, // Not a duplicate
+        });
       }
     }
 
-    // Update batch statistics
-    await context.db
-      .update(transactionBatches)
-      .set({
-        new_transactions: newTransactions,
-        duplicated_transactions: duplicatedTransactions,
-      })
-      .where(eq(transactionBatches.id, batchRecord.id));
+    // Update batch statistics using repository
+    await transactionBatchesRepo.update(batchRecord.id, {
+      new_transactions: newTransactions,
+      duplicated_transactions: duplicatedTransactions,
+    });
 
     return redirect("/batches");
   } catch (error) {

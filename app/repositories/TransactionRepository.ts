@@ -224,4 +224,17 @@ export class TransactionRepository extends AuditableDrizzleRepository<
       },
     };
   }
+
+  /**
+   * Find transactions by batch ID with owner relations
+   */
+  async findByBatchIdWithOwner(batchId: number) {
+    return await this.db.query.transactions.findMany({
+      where: eq(schema.transactions.batch_id, batchId),
+      orderBy: (transactions, { desc }) => [desc(transactions.date)],
+      with: {
+        owner: true,
+      },
+    });
+  }
 }
