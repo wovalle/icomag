@@ -9,28 +9,17 @@ import {
 
 export interface AuditContext {
   user?: User | null;
-  request?: Request;
   skipAudit?: boolean;
 }
 
 export class AuditService {
   private auditLogRepository: AuditLogRepository;
 
-  constructor(private db: DrizzleD1Database<typeof schema>) {
+  constructor(
+    private db: DrizzleD1Database<typeof schema>,
+    private context: Omit<AuditContext, "skipAudit">
+  ) {
     this.auditLogRepository = new AuditLogRepository(db);
-  }
-
-  private getRequestInfo(request?: Request) {
-    if (!request) return {};
-
-    return {
-      ip_address:
-        request.headers.get("x-forwarded-for") ||
-        request.headers.get("x-real-ip") ||
-        request.headers.get("cf-connecting-ip") ||
-        undefined,
-      user_agent: request.headers.get("user-agent") || undefined,
-    };
   }
 
   async logEvent(
@@ -38,15 +27,14 @@ export class AuditService {
       AuditLogEntry,
       "user_id" | "user_email" | "ip_address" | "user_agent"
     >,
-    context?: AuditContext
+    overrideContext?: AuditContext
   ): Promise<void> {
-    const requestInfo = this.getRequestInfo(context?.request);
+    const context = overrideContext ?? this.context;
 
     await this.auditLogRepository.log({
       ...entry,
       user_id: context?.user?.id,
       user_email: context?.user?.email,
-      ...requestInfo,
     });
   }
 

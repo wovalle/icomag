@@ -29,8 +29,6 @@ export interface AuditLogEntry {
   user_id?: string;
   user_email?: string;
   details?: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
   is_system_event?: number;
 }
 

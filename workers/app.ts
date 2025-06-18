@@ -1,6 +1,6 @@
 import type { User } from "better-auth";
 import { eq } from "drizzle-orm";
-import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+import { drizzle } from "drizzle-orm/d1";
 import { createRequestHandler } from "react-router";
 import { getAuth } from "../app/lib/auth.server";
 import {
@@ -26,17 +26,19 @@ export default {
   async fetch(request, env, ctx) {
     const db = drizzle(env.DB, { schema });
 
-    // Create audit service with direct database access (no cyclical dependency)
-    const auditService = new AuditService(db);
-
-    // Create repository factory with audit service
-    const dbRepository = createRepositoryFactory(db, auditService);
-
     const auth = getAuth({
       env,
       db,
-      dbRepository,
     });
+
+    const session = await auth.api.getSession(request);
+
+    const auditService = new AuditService(db, {
+      user: session?.user,
+    });
+
+    // Create repository factory with audit service
+    const dbRepository = createRepositoryFactory(db, auditService);
 
     const attachmentService = new AttachmentService(db, {
       accessKeyId: env.R2_ACCESS_KEY_ID,
@@ -44,10 +46,10 @@ export default {
       accountId: env.R2_ACCOUNT_ID,
       bucketName: "icona",
     });
+
     return requestHandler(request, {
       env,
       cloudflare: { env, ctx },
-      db,
       dbRepository,
       attachmentService,
       auditService,
@@ -82,7 +84,6 @@ declare module "react-router" {
       env: Env;
       ctx: ExecutionContext;
     };
-    db: DrizzleD1Database<typeof schema>;
     dbRepository: RepositoryFactory;
     attachmentService: AttachmentService;
     auditService: AuditService;

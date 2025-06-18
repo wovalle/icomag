@@ -1,13 +1,16 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins";
-import type { AppLoadContext } from "react-router";
 import { Resend } from "resend";
 
 import { eq } from "drizzle-orm";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../database/schema";
 
-type Ctx = Pick<AppLoadContext, "db" | "env" | "dbRepository">;
+type Ctx = {
+  db: DrizzleD1Database<typeof schema>;
+  env: Env;
+};
 
 let authInstance: ReturnType<typeof betterAuth>;
 
@@ -25,7 +28,7 @@ export function createBetterAuth(
           sendMagicLink: async ({ email, token, url }, request) => {
             const resend = new Resend(env.RESEND_API_KEY);
 
-            const user = await ctx.dbRepository.getOwnersRepository().findOne({
+            const user = await ctx.db.query.owners.findFirst({
               where: eq(schema.owners.email, email),
             });
 
