@@ -20,6 +20,8 @@ export type AuditLogEntityType =
   | "BATCH"
   | "PATTERN"
   | "TRANSACTION_TAG"
+  | "LPG_REFILL"
+  | "LPG_REFILL_ENTRY"
   | "SYSTEM";
 
 export interface AuditLogEntry {

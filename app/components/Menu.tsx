@@ -65,6 +65,11 @@ export function Menu() {
               </Link>
             </li>
             <li>
+              <Link to="/lpg" className={isActive("/lpg")}>
+                LPG
+              </Link>
+            </li>
+            <li>
               <Link to="/batches" className={isActive("/batches")}>
                 Batches
               </Link>
@@ -114,6 +119,11 @@ export function Menu() {
               className={`btn btn-ghost ${isActive("/owners")}`}
             >
               Owners
+            </Link>
+          </li>
+          <li>
+            <Link to="/lpg" className={`btn btn-ghost ${isActive("/lpg")}`}>
+              LPG
             </Link>
           </li>
           <li>

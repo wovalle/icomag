@@ -74,13 +74,14 @@ export class AttachmentService {
    * Upload a file to R2 and store metadata in the database
    */
   async uploadAttachment(
-    transactionId: number,
-    file: File
+    entityId: number,
+    file: File,
+    entityType: "transaction" | "refill" | "refill_entry" = "transaction"
   ): Promise<{ success: boolean; attachment?: Attachment; error?: string }> {
     try {
       // Generate a unique key for the file in R2
       const timestamp = Date.now();
-      const r2Key = `attachments_${process.env.NODE_ENV}/${timestamp}_${file.name}`;
+      const r2Key = `attachments_${process.env.NODE_ENV}/${entityType}s/${timestamp}_${file.name}`;
 
       // Create the URL for the PUT request
       const url = new URL(
@@ -108,16 +109,30 @@ export class AttachmentService {
         throw new Error(`Upload failed with status: ${response.status}`);
       }
 
+      // Prepare attachment data based on entity type
+      const attachmentData: any = {
+        filename: file.name,
+        r2_key: r2Key,
+        size: file.size,
+        mime_type: file.type,
+      };
+
+      switch (entityType) {
+        case "transaction":
+          attachmentData.transaction_id = entityId;
+          break;
+        case "refill":
+          attachmentData.refill_id = entityId;
+          break;
+        case "refill_entry":
+          attachmentData.refill_entry_id = entityId;
+          break;
+      }
+
       // Store file metadata in the database
       const [attachment] = await this.db
         .insert(attachments)
-        .values({
-          transaction_id: transactionId,
-          filename: file.name,
-          r2_key: r2Key,
-          size: file.size,
-          mime_type: file.type,
-        })
+        .values(attachmentData)
         .returning();
 
       return {
@@ -222,6 +237,51 @@ export class AttachmentService {
     } catch (error) {
       console.error("Error getting attachment URL:", error);
       return { success: false, error: "Failed to get attachment URL" };
+    }
+  }
+
+  /**
+   * Get all attachments for a refill
+   */
+  async getAttachmentsForRefill(
+    refillId: number
+  ): Promise<{ success: boolean; attachments?: Attachment[]; error?: string }> {
+    try {
+      const result = await this.db.query.attachments.findMany({
+        where: eq(attachments.refill_id, refillId),
+      });
+
+      return {
+        success: true,
+        attachments: result,
+      };
+    } catch (error) {
+      console.error("Error fetching refill attachments:", error);
+      return { success: false, error: "Failed to fetch refill attachments" };
+    }
+  }
+
+  /**
+   * Get all attachments for a refill entry
+   */
+  async getAttachmentsForRefillEntry(
+    refillEntryId: number
+  ): Promise<{ success: boolean; attachments?: Attachment[]; error?: string }> {
+    try {
+      const result = await this.db.query.attachments.findMany({
+        where: eq(attachments.refill_entry_id, refillEntryId),
+      });
+
+      return {
+        success: true,
+        attachments: result,
+      };
+    } catch (error) {
+      console.error("Error fetching refill entry attachments:", error);
+      return {
+        success: false,
+        error: "Failed to fetch refill entry attachments",
+      };
     }
   }
 }

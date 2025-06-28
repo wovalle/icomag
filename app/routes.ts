@@ -18,6 +18,10 @@ export default [
     "/transactions/:id/attachment/:attachmentId",
     "./routes/transactions.$id.attachment.$attachmentId.tsx"
   ),
+  route("/attachment/:id", "./routes/attachment.$id.tsx"),
+  route("/lpg", "./routes/lpg.tsx"),
+  route("/lpg/new", "./routes/lpg.new.tsx"),
+  route("/lpg/:id", "./routes/lpg.$id.tsx"),
   route("/balance", "./routes/balance.tsx"),
   route("/audit-logs", "./routes/audit-logs.tsx"),
   route("/auth/signin", "./routes/auth.signin.tsx"),

@@ -99,6 +99,20 @@
       "when": 1750025824444,
       "tag": "0013_noisy_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1750864360792,
+      "tag": "0014_thankful_black_bolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1750864818954,
+      "tag": "0015_odd_hiroim",
+      "breakpoints": true
     }
   ]
 }

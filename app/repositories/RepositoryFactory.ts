@@ -8,6 +8,7 @@ import {
 } from "./AuditLogRepository";
 import { AuditableDrizzleRepository } from "./AuditableDrizzleRepository";
 import { KVStoreRepository } from "./KVStoreRepository";
+import { LpgRefillRepository } from "./LpgRefillRepository";
 import { TransactionRepository } from "./TransactionRepository";
 import { TransactionTagsRepository } from "./TransactionTagsRepository";
 
@@ -87,6 +88,19 @@ export class RepositoryFactory {
       this.auditService,
       "TRANSACTION_TAG"
     );
+  }
+
+  getAttachmentsRepository() {
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.attachments,
+      this.auditService,
+      "ATTACHMENT"
+    );
+  }
+
+  getLpgRefillsRepository() {
+    return new LpgRefillRepository(this.db, this.auditService);
   }
 
   getKVStoreRepository() {

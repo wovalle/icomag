@@ -15,8 +15,7 @@
     "dev": "react-router dev",
     "preview": "npm run build && vite preview",
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
-    "test": "vitest",
-    "studio": "drizzle-kit studio"
+    "test": "vitest"
   },
   "dependencies": {
     "@react-router/fs-routes": "^7.6.2",

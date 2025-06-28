@@ -57,12 +57,55 @@ export const transactionBatches = sqliteTable("transaction_batches", {
     .$defaultFn(() => Math.floor(Date.now() / 1000)),
 });
 
+// LPG refills table to track LPG tank refills
+export const lpgRefills = sqliteTable("lpg_refills", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  bill_amount: real().notNull(), // Total amount of the LPG bill
+  gallons_refilled: real().notNull(), // Number of gallons refilled
+  refill_date: integer().notNull(), // Unix timestamp of refill date
+  efficiency_percentage: real().default(0), // Extra percentage for inefficiencies
+  tag_id: integer().references(() => transactionTags.id), // Tag for relating to transactions
+  created_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+  updated_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
+// LPG refill entries table to track per-apartment consumption
+export const lpgRefillEntries = sqliteTable("lpg_refill_entries", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  refill_id: integer()
+    .references(() => lpgRefills.id, { onDelete: "cascade" })
+    .notNull(),
+  owner_id: integer()
+    .references(() => owners.id, { onDelete: "cascade" })
+    .notNull(),
+  previous_reading: real().notNull(), // Previous meter reading
+  current_reading: real().notNull(), // Current meter reading
+  consumption: real().notNull(), // Difference (current - previous)
+  percentage: real().notNull(), // Percentage of total consumption
+  subtotal: real().notNull(), // Base amount to pay
+  total_amount: real().notNull(), // Final amount including inefficiencies
+  created_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+  updated_at: integer()
+    .notNull()
+    .$defaultFn(() => Math.floor(Date.now() / 1000)),
+});
+
 // Attachments table to store file information
 export const attachments = sqliteTable("attachments", {
   id: integer().primaryKey({ autoIncrement: true }),
-  transaction_id: integer()
-    .references(() => transactions.id, { onDelete: "cascade" })
-    .notNull(),
+  transaction_id: integer().references(() => transactions.id, {
+    onDelete: "cascade",
+  }),
+  refill_id: integer().references(() => lpgRefills.id, { onDelete: "cascade" }),
+  refill_entry_id: integer().references(() => lpgRefillEntries.id, {
+    onDelete: "cascade",
+  }),
   filename: text().notNull(), // Original filename
   r2_key: text().notNull(), // Key in R2 bucket
   size: integer().notNull(), // File size in bytes
@@ -186,6 +229,7 @@ export const auditLogs = sqliteTable("audit_logs", {
 export const ownersRelations = relations(owners, ({ many }) => ({
   transactions: many(transactions),
   recognitionPatterns: many(ownerPatterns),
+  lpgRefillEntries: many(lpgRefillEntries),
 }));
 
 // Define relations for owner patterns
@@ -218,6 +262,14 @@ export const attachmentsRelations = relations(attachments, ({ one }) => ({
   transaction: one(transactions, {
     fields: [attachments.transaction_id],
     references: [transactions.id],
+  }),
+  refill: one(lpgRefills, {
+    fields: [attachments.refill_id],
+    references: [lpgRefills.id],
+  }),
+  refillEntry: one(lpgRefillEntries, {
+    fields: [attachments.refill_entry_id],
+    references: [lpgRefillEntries.id],
   }),
 }));
 
@@ -274,3 +326,29 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// Define relations for LPG refills
+export const lpgRefillsRelations = relations(lpgRefills, ({ one, many }) => ({
+  entries: many(lpgRefillEntries),
+  attachments: many(attachments),
+  tag: one(transactionTags, {
+    fields: [lpgRefills.tag_id],
+    references: [transactionTags.id],
+  }),
+}));
+
+// Define relations for LPG refill entries
+export const lpgRefillEntriesRelations = relations(
+  lpgRefillEntries,
+  ({ one, many }) => ({
+    refill: one(lpgRefills, {
+      fields: [lpgRefillEntries.refill_id],
+      references: [lpgRefills.id],
+    }),
+    owner: one(owners, {
+      fields: [lpgRefillEntries.owner_id],
+      references: [owners.id],
+    }),
+    attachments: many(attachments),
+  })
+);
