@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import type { Owner, Tag, Transaction } from "../types";
 import Pagination from "./Pagination";
@@ -45,22 +45,6 @@ export default function TransactionTable({
   const { formatCurrency, formatDate } = formatters;
   const [registerMode, setRegisterMode] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-
-  // Check screen width on mount and when window resizes
-  useEffect(() => {
-    const checkScreenSize = () => {
-      setViewMode(window.innerWidth < 768 ? "cards" : "table");
-    };
-
-    // Initial check
-    checkScreenSize();
-
-    // Add event listener for resize
-    window.addEventListener("resize", checkScreenSize);
-
-    // Cleanup
-    return () => window.removeEventListener("resize", checkScreenSize);
-  }, []);
 
   return (
     <div className="bg-base-100 rounded-box shadow">
