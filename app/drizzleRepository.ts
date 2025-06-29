@@ -233,6 +233,111 @@ export class DrizzleRepository<T extends SQLiteTable> {
   }
 
   /**
+   * Create multiple records using D1 batch functionality with automatic chunking
+   * to respect D1's 100 bound parameter limit. This is more efficient than createMany
+   * for large datasets as it uses D1's batch API for better performance.
+   */
+  async batchCreate<TData extends Record<string, unknown>, TReturn = unknown>(
+    data: TData[],
+    options?: {
+      tx?: Transaction;
+    }
+  ): Promise<TReturn[]> {
+    try {
+      if (data.length === 0) {
+        return [];
+      }
+
+      // For small datasets, use the regular createMany method
+      if (data.length <= 10) {
+        return this.createMany<TData, TReturn>(data, options);
+      }
+
+      // If we're already in a transaction, fall back to createMany
+      // since we can't use batch inside a transaction
+      if (options?.tx) {
+        return this.createMany<TData, TReturn>(data, options);
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+
+      // Execute lifecycle hook for each item
+      for (const item of data) {
+        await this.beforeCreate(item);
+      }
+
+      // Add timestamps if they exist
+      const dataWithTimestamps = data.map((item) => ({
+        ...item,
+        ...(this.hasColumn("created_at") && { created_at: now }),
+        ...(this.hasColumn("updated_at") && { updated_at: now }),
+      }));
+
+      // Calculate safe chunk size based on bound parameter limit
+      const chunks = this.chunkDataForInsert(dataWithTimestamps);
+
+      // Ensure we have at least one chunk (should never be empty due to early checks)
+      if (chunks.length === 0) {
+        throw new Error("No chunks to process - this should not happen");
+      }
+
+      // Create batch statements for each chunk
+      const batchStatements = chunks.map((chunk) =>
+        this.db.insert(this.table).values(chunk).returning()
+      );
+
+      // Execute all chunks in a single batch operation
+      // TypeScript needs to know the array is non-empty for batch method
+      const [firstStatement, ...restStatements] = batchStatements;
+      const batchResults = await this.db.batch([
+        firstStatement,
+        ...restStatements,
+      ]);
+
+      // Flatten results from all chunks
+      const allResults = batchResults.flat() as unknown as TReturn[];
+
+      // Execute lifecycle hook for each result
+      for (const item of allResults) {
+        await this.afterCreate(item);
+      }
+
+      return allResults;
+    } catch (err) {
+      throw this.handleError(err);
+    }
+  }
+
+  /**
+   * Chunk data for insert operations to respect D1's bound parameter limits
+   * D1 has a maximum of 100 bound parameters per query
+   */
+  private chunkDataForInsert<T extends Record<string, unknown>>(
+    data: T[]
+  ): T[][] {
+    if (data.length === 0) {
+      return [];
+    }
+
+    // Get the number of columns by looking at the first record
+    const columnCount = Object.keys(data[0]).length;
+
+    // Calculate safe chunk size (use 90 as limit to have some buffer)
+    const maxParamsPerQuery = 90;
+    const chunkSize = Math.floor(maxParamsPerQuery / columnCount);
+
+    // Ensure chunk size is at least 1
+    const safeChunkSize = Math.max(1, chunkSize);
+
+    const chunks: T[][] = [];
+    for (let i = 0; i < data.length; i += safeChunkSize) {
+      chunks.push(data.slice(i, i + safeChunkSize));
+    }
+
+    return chunks;
+  }
+
+  /**
    * Upsert a record (insert or update if exists)
    * Uses the primary key or specified conflict columns to determine existence
    */

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, redirect, useFetcher } from "react-router";
 import { useIsAdmin } from "~/hooks";
 import { owners, transactionTags } from "../../database/schema";
@@ -198,23 +198,22 @@ export default function NewLpgRefill({ loaderData }: Route.ComponentProps) {
   const isAdmin = useIsAdmin();
   const { owners, tags, error, latestRefill } = loaderData;
 
-  const [entries, setEntries] = useState<RefillEntry[]>([]);
-  const [billAmount, setBillAmount] = useState<number>(0);
-  const [efficiencyPercentage, setEfficiencyPercentage] =
-    useState<number>(0.03);
-  const [selectedTagId, setSelectedTagId] = useState<string>("");
+  function getPreviousReading(ownerId: number): number {
+    if (!latestRefill) return 0;
+    const lastEntry = latestRefill.entries?.find((e) => e.owner_id === ownerId);
+    return lastEntry?.current_reading ?? 0;
+  }
 
-  // Initialize entries with all owners and their previous readings
-  useEffect(() => {
-    if (owners.length > 0) {
-      const initialEntries = owners.map((owner) => ({
-        ownerId: owner.id,
-        currentReading: getPreviousReading(owner.id), // Start with previous reading
-        photos: undefined,
-      }));
-      setEntries(initialEntries);
-    }
-  }, [owners, latestRefill]);
+  const [entries, setEntries] = useState<RefillEntry[]>(
+    owners.map((owner) => ({
+      ownerId: owner.id,
+      currentReading: getPreviousReading(owner.id),
+      photos: undefined,
+    }))
+  );
+  const [billAmount, setBillAmount] = useState<number>(0);
+  const [efficiencyPercentage, setEfficiencyPercentage] = useState<number>(3);
+  const [selectedTagId, setSelectedTagId] = useState<string>("");
 
   // If not admin, redirect would happen in loader
   if (!isAdmin) {
@@ -227,12 +226,6 @@ export default function NewLpgRefill({ loaderData }: Route.ComponentProps) {
       sum + (entry.currentReading - getPreviousReading(entry.ownerId)),
     0
   );
-
-  function getPreviousReading(ownerId: number): number {
-    if (!latestRefill) return 0;
-    const lastEntry = latestRefill.entries?.find((e) => e.owner_id === ownerId);
-    return lastEntry?.current_reading ?? 0;
-  }
 
   function updateEntry(
     index: number,
@@ -329,6 +322,7 @@ export default function NewLpgRefill({ loaderData }: Route.ComponentProps) {
                 </label>
                 <input
                   type="number"
+                  step="0.01"
                   name="billAmount"
                   value={billAmount}
                   onChange={(e) =>
@@ -345,6 +339,7 @@ export default function NewLpgRefill({ loaderData }: Route.ComponentProps) {
                 </label>
                 <input
                   type="number"
+                  step="0.001"
                   name="gallonsRefilled"
                   className="input input-bordered"
                   required
@@ -370,6 +365,7 @@ export default function NewLpgRefill({ loaderData }: Route.ComponentProps) {
                 </label>
                 <input
                   type="number"
+                  step="0.01"
                   name="efficiencyPercentage"
                   value={efficiencyPercentage}
                   onChange={(e) =>
@@ -473,7 +469,7 @@ export default function NewLpgRefill({ loaderData }: Route.ComponentProps) {
                           <td>
                             <input
                               type="number"
-                              step="0.01"
+                              step="0.001"
                               min={details.previousReading}
                               value={entry.currentReading}
                               onChange={(e) =>

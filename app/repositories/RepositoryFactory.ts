@@ -103,6 +103,15 @@ export class RepositoryFactory {
     return new LpgRefillRepository(this.db, this.auditService);
   }
 
+  getLpgRefillEntriesRepository() {
+    return new AuditableDrizzleRepository(
+      this.db,
+      schema.lpgRefillEntries,
+      this.auditService,
+      "LPG_REFILL_ENTRY"
+    );
+  }
+
   getKVStoreRepository() {
     return new KVStoreRepository(this.db, this.auditService);
   }

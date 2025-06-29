@@ -8,11 +8,22 @@ import { AuditableDrizzleRepository } from "./AuditableDrizzleRepository";
 export class LpgRefillRepository extends AuditableDrizzleRepository<
   typeof schema.lpgRefills
 > {
+  private lpgRefillEntriesRepository: AuditableDrizzleRepository<
+    typeof schema.lpgRefillEntries
+  >;
+
   constructor(
     db: DrizzleD1Database<typeof schema>,
     auditService: AuditService
   ) {
     super(db, schema.lpgRefills, auditService, "LPG_REFILL");
+    // Create the entries repository for proper audit logging
+    this.lpgRefillEntriesRepository = new AuditableDrizzleRepository(
+      db,
+      schema.lpgRefillEntries,
+      auditService,
+      "LPG_REFILL_ENTRY"
+    );
   }
 
   /**
@@ -44,22 +55,20 @@ export class LpgRefillRepository extends AuditableDrizzleRepository<
       "id" | "refill_id" | "created_at" | "updated_at"
     >[]
   ) {
-    // Create the refill
-    const [refill] = await this.db
-      .insert(schema.lpgRefills)
-      .values(refillData)
-      .returning();
+    // Create the refill using the inherited create method for proper audit logging
+    const refill = await this.create(refillData);
 
-    // Create the entries
+    // Create the entries with proper chunking and audit logging
     const entriesWithRefillId = entries.map((entry) => ({
       ...entry,
       refill_id: refill.id,
     }));
 
-    const createdEntries = await this.db
-      .insert(schema.lpgRefillEntries)
-      .values(entriesWithRefillId)
-      .returning();
+    // Use the lpgRefillEntries repository's batchCreate method
+    // This ensures proper audit logging and uses the chunking logic from the base repository
+    const createdEntries = await this.lpgRefillEntriesRepository.batchCreate(
+      entriesWithRefillId
+    );
 
     return { refill, entries: createdEntries };
   }
