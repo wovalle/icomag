@@ -237,4 +237,34 @@ export class TransactionRepository extends AuditableDrizzleRepository<
       },
     });
   }
+
+  /**
+   * Find recent transactions for a specific tag with owner information
+   */
+  async findRecentByTagId(tagId: number, limit: number = 20) {
+    const results = await this.db
+      .select()
+      .from(schema.transactionToTags)
+      .innerJoin(
+        schema.transactions,
+        eq(schema.transactionToTags.transaction_id, schema.transactions.id)
+      )
+      .leftJoin(
+        schema.owners,
+        eq(schema.owners.id, schema.transactions.owner_id)
+      )
+      .where(
+        and(
+          eq(schema.transactionToTags.tag_id, tagId),
+          eq(schema.transactions.is_duplicate, 0)
+        )
+      )
+      .limit(limit)
+      .orderBy(sql`${schema.transactions.date} DESC`);
+
+    return results.map((result) => ({
+      ...result.transactions,
+      owner: result.owners,
+    }));
+  }
 }

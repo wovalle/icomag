@@ -18,6 +18,7 @@ export class AttachmentService {
   private awsClient: AwsClient;
   private accountId: string;
   private bucketName: string;
+  private nodeEnv: string;
 
   constructor(
     db: DB,
@@ -26,7 +27,8 @@ export class AttachmentService {
       secretAccessKey: string;
       accountId: string;
       bucketName: string;
-    }
+    },
+    nodeEnv: string
   ) {
     this.db = db;
 
@@ -47,6 +49,8 @@ export class AttachmentService {
       secretAccessKey: r2Config.secretAccessKey,
       service: "s3",
     });
+
+    this.nodeEnv = nodeEnv;
   }
 
   /**
@@ -81,7 +85,7 @@ export class AttachmentService {
     try {
       // Generate a unique key for the file in R2
       const timestamp = Date.now();
-      const r2Key = `attachments_${process.env.NODE_ENV}/${entityType}s/${timestamp}_${file.name}`;
+      const r2Key = `attachments_${this.nodeEnv}/${entityType}s/${timestamp}_${file.name}`;
 
       // Create the URL for the PUT request
       const url = new URL(

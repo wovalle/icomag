@@ -40,12 +40,16 @@ export default {
     // Create repository factory with audit service
     const dbRepository = createRepositoryFactory(db, auditService);
 
-    const attachmentService = new AttachmentService(db, {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-      accountId: env.R2_ACCOUNT_ID,
-      bucketName: "icona",
-    });
+    const attachmentService = new AttachmentService(
+      db,
+      {
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+        accountId: env.R2_ACCOUNT_ID,
+        bucketName: "icona",
+      },
+      env.NODE_ENV
+    );
 
     return requestHandler(request, {
       env,

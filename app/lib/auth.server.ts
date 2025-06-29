@@ -19,6 +19,7 @@ export function createBetterAuth(
   ctx: Ctx
 ) {
   const env = ctx.env;
+
   if (!authInstance) {
     authInstance = betterAuth({
       appName: "Icomag",
@@ -72,8 +73,8 @@ export function createBetterAuth(
           expiresIn: 60 * 5, // 5 minutes
         }),
       ],
-      secret: process.env.BETTER_AUTH_SECRET,
-      baseURL: process.env.BETTER_AUTH_URL,
+      secret: env.BETTER_AUTH_SECRET,
+      baseURL: env.BETTER_AUTH_URL,
       session: {
         expiresIn: 60 * 60 * 24 * 30, // 30 days
         updateAge: 60 * 60 * 24, // 1 day

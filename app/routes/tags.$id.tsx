@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import {
   Link,
@@ -7,13 +7,7 @@ import {
   useLoaderData,
   useNavigate,
 } from "react-router";
-import {
-  owners,
-  tagPatterns,
-  transactions,
-  transactionTags,
-  transactionToTags,
-} from "../../database/schema";
+import { tagPatterns, transactionTags } from "../../database/schema";
 import type { Route } from "./+types/tags.$id";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
@@ -31,6 +25,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     const transactionTagsRepo =
       context.dbRepository.getTransactionTagsRepository();
     const tagPatternsRepo = context.dbRepository.getTagPatternsRepository();
+    const transactionRepo = context.dbRepository.getTransactionsRepository();
 
     // Find tag using repository method with parent tag relation
     const tag = await transactionTagsRepo.getTransactionTagsWithParentTag(
@@ -54,28 +49,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       orderBy: [{ column: tagPatterns.created_at, direction: "desc" }],
     });
 
-    // Get recent transactions for this tag - need complex join, keep raw query for now
-    const relatedTransactions = await context.db
-      .select()
-      .from(transactionToTags)
-      .innerJoin(
-        transactions,
-        eq(transactionToTags.transaction_id, transactions.id)
-      )
-      .leftJoin(owners, eq(owners.id, transactions.owner_id))
-      .where(
-        and(
-          eq(transactionToTags.tag_id, tagId),
-          eq(transactions.is_duplicate, 0)
-        )
-      )
-      .limit(20)
-      .orderBy(desc(transactions.date));
-
-    const recentTransactions = relatedTransactions.map((tt) => ({
-      ...tt.transactions,
-      owner: tt.owners,
-    }));
+    // Get recent transactions for this tag using repository method
+    const recentTransactions = await transactionRepo.findRecentByTagId(
+      tagId,
+      20
+    );
 
     return {
       tag,
