@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Form, Link, useLoaderData } from "react-router";
 
+import { OctagonAlert } from "lucide-react";
 import { useIsAdmin } from "~/hooks";
 import { owners } from "../../database/schema";
 import type { Route } from "./+types/owners";
@@ -12,9 +13,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     // Get repository
     const ownersRepo = context.dbRepository.getOwnersRepository();
 
-    // Get owners using repository
+    // Get owners using repository, ordered by apartment
     const ownersList = await ownersRepo.findMany({
-      orderBy: [{ column: owners.created_at, direction: "desc" }],
+      orderBy: [{ column: owners.apartment_id, direction: "asc" }],
     });
 
     return {
@@ -130,14 +131,13 @@ export default function OwnersIndex() {
               <th>Name</th>
               <th>Apartment</th>
               <th>Contact</th>
-              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {owners.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-4">
+                <td colSpan={5} className="text-center py-4">
                   No owners found. Add your first owner!
                 </td>
               </tr>
@@ -145,18 +145,18 @@ export default function OwnersIndex() {
               owners.map((owner) => (
                 <tr key={owner.id}>
                   <td>{owner.id}</td>
-                  <td>{owner.name}</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      {owner.name}
+                      {!owner.is_active && (
+                        <OctagonAlert className="w-4 h-4 text-warning" />
+                      )}
+                    </div>
+                  </td>
                   <td>{owner.apartment_id}</td>
                   <td>
                     {owner.email && <div>{owner.email}</div>}
                     {owner.phone && <div>{owner.phone}</div>}
-                  </td>
-                  <td>
-                    {owner.is_active ? (
-                      <div className="badge badge-success">Active</div>
-                    ) : (
-                      <div className="badge badge-error">Inactive</div>
-                    )}
                   </td>
                   <td>
                     <div className="join">
@@ -166,21 +166,6 @@ export default function OwnersIndex() {
                       >
                         View
                       </Link>
-                      {isAdmin ? (
-                        <Link
-                          to={`/owners/${owner.id}/edit`}
-                          className="btn btn-sm join-item"
-                        >
-                          Edit
-                        </Link>
-                      ) : (
-                        <button
-                          className="btn btn-sm join-item btn-disabled"
-                          title="Admin access required"
-                        >
-                          Edit
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>

@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Always use lucide-react for icons
+We use react router 7, use Route.LoaderData instead of useLoaderData

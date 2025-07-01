@@ -128,9 +128,6 @@ export default function LpgRefillDetail() {
             Refill from {formatDate(refill.refill_date)}
           </p>
         </div>
-        <Link to="/lpg" className="btn">
-          ← Back to List
-        </Link>
       </div>
 
       {/* Refill Summary */}
@@ -198,6 +195,63 @@ export default function LpgRefillDetail() {
           </div>
         </div>
       </div>
+
+      {/* Attachments */}
+      {refill.attachments && refill.attachments.length > 0 && (
+        <div className="card shadow-md mb-6">
+          <div className="card-body">
+            <h2 className="card-title mb-4">Attachments</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {refill.attachments.map((attachment) => (
+                <div key={attachment.id} className="card bg-base-200">
+                  <div className="card-body p-4">
+                    <div className="flex items-center gap-3">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-8 w-8"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                        />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className="font-medium truncate"
+                          title={attachment.filename}
+                        >
+                          {attachment.filename}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {attachment.size
+                            ? `${(attachment.size / 1024).toFixed(1)} KB`
+                            : "Unknown size"}
+                        </p>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <div className="card-actions justify-end mt-2">
+                        <Link
+                          to={`/attachment/${attachment.id}`}
+                          className="btn btn-sm btn-primary"
+                          target="_blank"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Apartment Entries Table */}
       <div className="card shadow-md mb-6">
@@ -287,58 +341,22 @@ export default function LpgRefillDetail() {
         </div>
       </div>
 
-      {/* Attachments */}
-      {refill.attachments && refill.attachments.length > 0 && (
+      {/* Transactions for this Refill */}
+      {refill.tag && (
         <div className="card shadow-md">
           <div className="card-body">
-            <h2 className="card-title mb-4">Attachments</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {refill.attachments.map((attachment) => (
-                <div key={attachment.id} className="card bg-base-200">
-                  <div className="card-body p-4">
-                    <div className="flex items-center gap-3">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-8 w-8"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                        />
-                      </svg>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className="font-medium truncate"
-                          title={attachment.filename}
-                        >
-                          {attachment.filename}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {attachment.size
-                            ? `${(attachment.size / 1024).toFixed(1)} KB`
-                            : "Unknown size"}
-                        </p>
-                      </div>
-                    </div>
-                    {isAdmin && (
-                      <div className="card-actions justify-end mt-2">
-                        <Link
-                          to={`/attachment/${attachment.id}`}
-                          className="btn btn-sm btn-primary"
-                          target="_blank"
-                        >
-                          View
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <h2 className="card-title mb-4">Associated Transactions</h2>
+            <div className="text-center py-8">
+              <p className="text-base-content/70">
+                Transactions associated with tag "{refill.tag.name}" will be
+                displayed here.
+              </p>
+              <Link
+                to={`/transactions?tagId=${refill.tag.id}`}
+                className="btn btn-primary mt-4"
+              >
+                View Transactions
+              </Link>
             </div>
           </div>
         </div>

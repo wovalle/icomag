@@ -239,6 +239,83 @@ export class TransactionRepository extends AuditableDrizzleRepository<
   }
 
   /**
+   * Find transactions by batch ID with owner and tags relations
+   */
+  async findByBatchIdWithOwnerAndTags(
+    batchId: number
+  ): Promise<TransactionWithDetails[]> {
+    const transactions = await this.db.query.transactions.findMany({
+      where: eq(schema.transactions.batch_id, batchId),
+      orderBy: (transactions, { desc }) => [desc(transactions.date)],
+      with: {
+        owner: true,
+        attachments: true,
+        tags: {
+          with: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    return transactions.map((transaction) => {
+      const tags = transaction.tags.map((relation) => relation.tag);
+      return {
+        ...transaction,
+        tags,
+      };
+    });
+  }
+
+  /**
+   * Find many transactions with full details including tags
+   */
+  async findManyWithTags(options: {
+    where?: any;
+    orderBy?: Array<{
+      column:
+        | typeof schema.transactions.date
+        | typeof schema.transactions.id
+        | typeof schema.transactions.amount;
+      direction: "asc" | "desc";
+    }>;
+    pagination?: { limit: number; offset?: number };
+  }): Promise<TransactionWithDetails[]> {
+    // Convert orderBy to the correct Drizzle format
+    let drizzleOrderBy;
+    if (options.orderBy && options.orderBy.length > 0) {
+      drizzleOrderBy = (transactions: any, { desc, asc }: any) =>
+        options.orderBy!.map((order) =>
+          order.direction === "desc" ? desc(order.column) : asc(order.column)
+        );
+    }
+
+    const transactions = await this.db.query.transactions.findMany({
+      where: options.where,
+      orderBy: drizzleOrderBy,
+      limit: options.pagination?.limit,
+      offset: options.pagination?.offset,
+      with: {
+        owner: true,
+        attachments: true,
+        tags: {
+          with: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    return transactions.map((transaction) => {
+      const tags = transaction.tags.map((relation: any) => relation.tag);
+      return {
+        ...transaction,
+        tags,
+      };
+    });
+  }
+
+  /**
    * Find recent transactions for a specific tag with owner information
    */
   async findRecentByTagId(tagId: number, limit: number = 20) {

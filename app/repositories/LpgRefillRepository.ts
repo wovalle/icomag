@@ -109,4 +109,27 @@ export class LpgRefillRepository extends AuditableDrizzleRepository<
       },
     });
   }
+
+  /**
+   * Get refill history for a specific owner
+   */
+  async findRefillsByOwnerId(ownerId: number) {
+    const refillEntries = await this.db.query.lpgRefillEntries.findMany({
+      where: eq(schema.lpgRefillEntries.owner_id, ownerId),
+      orderBy: (entries, { desc }) => [desc(entries.created_at)],
+      with: {
+        refill: {
+          with: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    // Transform to include owner entry data with refill
+    return refillEntries.map((entry) => ({
+      ...entry.refill,
+      ownerEntry: entry,
+    }));
+  }
 }

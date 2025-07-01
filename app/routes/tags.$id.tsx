@@ -1,13 +1,12 @@
 import { eq, ne } from "drizzle-orm";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link, useActionData, useFetcher, useNavigate } from "react-router";
 import {
-  Link,
-  useActionData,
-  useFetcher,
-  useLoaderData,
-  useNavigate,
-} from "react-router";
-import { tagPatterns, transactionTags } from "../../database/schema";
+  lpgRefills,
+  tagPatterns,
+  transactionTags,
+} from "../../database/schema";
 import type { Route } from "./+types/tags.$id";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
@@ -49,17 +48,27 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       orderBy: [{ column: tagPatterns.created_at, direction: "desc" }],
     });
 
-    // Get recent transactions for this tag using repository method
-    const recentTransactions = await transactionRepo.findRecentByTagId(
-      tagId,
-      20
-    );
+    // Get recent transactions for this tag using repository method with tags
+    const recentTransactions = await transactionRepo.findWithFilters({
+      tagId: tagId.toString(),
+      limit: 20,
+      page: 1,
+    });
+
+    // Check if this tag is associated with any LPG refills
+    const lpgRefillsRepo = context.dbRepository.getLpgRefillsRepository();
+    const associatedRefills = await lpgRefillsRepo.findMany({
+      where: eq(lpgRefills.tag_id, tagId),
+      pagination: { limit: 1 }, // We only need to know if any exist
+    });
 
     return {
       tag,
       allTags,
       patterns,
-      recentTransactions,
+      recentTransactions: recentTransactions.transactions,
+      associatedRefill:
+        associatedRefills.length > 0 ? associatedRefills[0] : null,
       error: null,
       isAdmin: session?.isAdmin ?? false,
     };
@@ -140,9 +149,16 @@ export async function action({ params, context, request }: Route.ActionArgs) {
   return { success: false, error: "Invalid action" };
 }
 
-export default function TagDetailsPage() {
-  const { tag, allTags, patterns, recentTransactions, error, isAdmin } =
-    useLoaderData<typeof loader>();
+export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
+  const {
+    tag,
+    allTags,
+    patterns,
+    recentTransactions,
+    associatedRefill,
+    error,
+    isAdmin,
+  } = loaderData;
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -281,18 +297,28 @@ export default function TagDetailsPage() {
             </div>
             <div>
               <p className="font-semibold">Parent Tag:</p>
-              <p>
-                {tag.parentTag ? (
+              <div className="flex items-center gap-2">
+                <p>
+                  {tag.parentTag ? (
+                    <Link
+                      to={`/tags/${tag.parentTag.id}`}
+                      className="link link-primary"
+                    >
+                      {tag.parentTag.name}
+                    </Link>
+                  ) : (
+                    "No parent tag"
+                  )}
+                </p>
+                {associatedRefill && (
                   <Link
-                    to={`/tags/${tag.parentTag.id}`}
-                    className="link link-primary"
+                    to={`/lpg/${associatedRefill.id}`}
+                    className="btn btn-xs btn-outline"
                   >
-                    {tag.parentTag.name}
+                    View Refill
                   </Link>
-                ) : (
-                  "No parent tag"
                 )}
-              </p>
+              </div>
             </div>
             <div>
               <p className="font-semibold">Created:</p>
@@ -325,7 +351,7 @@ export default function TagDetailsPage() {
                     <th>Description</th>
                     <th>Owner</th>
                     <th>Amount</th>
-                    <th>Type</th>
+                    <th>Tags</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -348,14 +374,37 @@ export default function TagDetailsPage() {
                             : "text-error"
                         }
                       >
-                        {formatCurrency(transaction.amount)}
+                        <div className="flex items-center gap-2">
+                          {transaction.type === "credit" ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4" />
+                          )}
+                          {formatCurrency(transaction.amount)}
+                        </div>
                       </td>
                       <td>
-                        {transaction.type === "credit" ? (
-                          <div className="badge badge-success">Money In</div>
-                        ) : (
-                          <div className="badge badge-error">Money Out</div>
-                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {transaction.tags && transaction.tags.length > 0 ? (
+                            transaction.tags.map((transactionTag) => (
+                              <div
+                                key={transactionTag.id}
+                                className="badge badge-info badge-sm"
+                              >
+                                <Link
+                                  to={`/tags/${transactionTag.id}`}
+                                  className="hover:brightness-90"
+                                >
+                                  {transactionTag.name}
+                                </Link>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-base-content/50 text-sm">
+                              No tags
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

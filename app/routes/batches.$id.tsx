@@ -1,16 +1,10 @@
 import { eq } from "drizzle-orm";
+import { Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { useState } from "react";
-import { Form, Link, useLoaderData, useNavigate } from "react-router";
+import { Form, Link, useNavigate } from "react-router";
 import { useIsAdmin } from "~/hooks";
-import type { Route } from "../+types/root";
 import { transactionBatches, transactions } from "../../database/schema";
-
-type BatchDetailLoaderData = {
-  batch: any;
-  transactions: any[];
-  error: string | null;
-  isAdmin: boolean;
-};
+import type { Route } from "./+types/batches.$id";
 
 export async function loader({ context, params }: Route.LoaderArgs) {
   if (!params.id) {
@@ -55,10 +49,8 @@ export async function loader({ context, params }: Route.LoaderArgs) {
       };
     }
 
-    // Load all transactions from this batch using repository
-    const batchTransactions = await transactionsRepo.findByBatchIdWithOwner(
-      batchId
-    );
+    const batchTransactions =
+      await transactionsRepo.findByBatchIdWithOwnerAndTags(batchId);
 
     return {
       batch,
@@ -125,8 +117,8 @@ export async function action({ context, params, request }: Route.ActionArgs) {
   }
 }
 
-export default function BatchDetailPage() {
-  const { batch, transactions, error } = useLoaderData<BatchDetailLoaderData>();
+export default function BatchDetailPage({ loaderData }: Route.ComponentProps) {
+  const { batch, transactions, error } = loaderData;
   const isAdmin = useIsAdmin();
   const [showDuplicates, setShowDuplicates] = useState(true);
   const navigate = useNavigate();
@@ -173,24 +165,22 @@ export default function BatchDetailPage() {
           </p>
         </div>
         <div className="join">
-          <Link to="/batches" className="btn btn-outline join-item">
-            Back to Batches
-          </Link>
           {batch &&
             (isAdmin ? (
               <button
                 onClick={handleDeleteConfirm}
                 className="btn btn-error join-item"
                 disabled={isDeleting}
+                title="Delete Batch"
               >
-                Delete Batch
+                <Trash2 className="w-5 h-5" />
               </button>
             ) : (
               <button
                 className="btn btn-error join-item btn-disabled"
                 title="Admin access required"
               >
-                Delete Batch
+                <Trash2 className="w-5 h-5" />
               </button>
             ))}
         </div>
@@ -295,7 +285,7 @@ export default function BatchDetailPage() {
                     <th>Date</th>
                     <th>Description</th>
                     <th>Amount</th>
-                    <th>Type</th>
+                    <th>Tags</th>
                     <th>Owner</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -334,14 +324,32 @@ export default function BatchDetailPage() {
                               : "text-error"
                           }
                         >
-                          {formatCurrency(transaction.amount)}
+                          <div className="flex items-center gap-2">
+                            {transaction.type === "credit" ? (
+                              <TrendingUp className="w-4 h-4" />
+                            ) : (
+                              <TrendingDown className="w-4 h-4" />
+                            )}
+                            {formatCurrency(transaction.amount)}
+                          </div>
                         </td>
                         <td>
-                          {transaction.type === "credit" ? (
-                            <div className="badge badge-success">Money In</div>
-                          ) : (
-                            <div className="badge badge-error">Money Out</div>
-                          )}
+                          <div className="flex flex-wrap gap-1">
+                            {transaction.tags && transaction.tags.length > 0 ? (
+                              transaction.tags.map((tag) => (
+                                <div
+                                  key={tag.id}
+                                  className="badge badge-info badge-sm"
+                                >
+                                  {tag.name}
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-base-content/50 text-sm">
+                                No tags
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td>
                           {transaction.owner ? (

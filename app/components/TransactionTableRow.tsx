@@ -258,9 +258,9 @@ export default function TransactionTableRow({
       <td>
         <div className="flex items-center gap-2">
           {transaction.type === "credit" ? (
-            <TrendingUp size={16} className="text-success" />
+            <TrendingUp className="w-4 h-4 text-success" />
           ) : (
-            <TrendingDown size={16} className="text-error" />
+            <TrendingDown className="w-4 h-4 text-error" />
           )}
           <div
             className={
@@ -361,24 +361,56 @@ export default function TransactionTableRow({
                 )}
               </div>
             ))}
+          {isAdmin && (
+            <div className="dropdown dropdown-end">
+              <div
+                tabIndex={0}
+                role="button"
+                className="btn btn-xs btn-circle btn-ghost"
+                title="Add tag"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+              </div>
+              <ul
+                tabIndex={0}
+                className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48 z-10 max-h-60 overflow-y-auto"
+              >
+                {tags.map((tag) => (
+                  <li key={tag.id}>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onAddTag(transaction.id, tag.id.toString());
+                        // Close dropdown by removing focus
+                        (e.target as HTMLElement).blur();
+                      }}
+                      className="text-left"
+                    >
+                      <span
+                        className="inline-block w-3 h-3 rounded-full mr-2"
+                        style={{ backgroundColor: tag.color || "#888" }}
+                      ></span>
+                      {tag.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-        {isAdmin && (
-          <div className="flex">
-            <select
-              className="select select-xs select-bordered w-full"
-              defaultValue=""
-              onChange={handleTagChange}
-              disabled={!isAdmin}
-            >
-              <option value="">Add tag...</option>
-              {tags.map((tag) => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </td>
       {isAdmin && (
         <td>

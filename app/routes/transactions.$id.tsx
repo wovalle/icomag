@@ -17,7 +17,7 @@ import { formatters } from "../services/transactionService";
 
 import type { Route } from "./+types/transactions.$id";
 
-export async function loader({ context, request, params }: Route.LoaderArgs) {
+export async function loader({ context, params }: Route.LoaderArgs) {
   const id = parseInt(params.id || "0");
 
   if (!id) {
@@ -26,7 +26,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       owners: [],
       allTags: [],
       isAdmin: false,
-      error: "Invalid transaction ID",
+      error: "Invalid transaction id",
     };
   }
 
@@ -57,19 +57,18 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       };
     }
 
-    // Get tags for this transaction - complex join, keep raw query for now
-    const transactionTagsList = await context.db
-      .select({
-        id: transactionTags.id,
-        name: transactionTags.name,
-        color: transactionTags.color,
-      })
-      .from(transactionToTags)
-      .innerJoin(
-        transactionTags,
-        eq(transactionToTags.tag_id, transactionTags.id)
-      )
-      .where(eq(transactionToTags.transaction_id, id));
+    // Get transaction with all details including tags using repository
+    const transactionWithTags = await transactionsRepo.findByIdWithDetails(id);
+
+    if (!transactionWithTags) {
+      return {
+        transaction: null,
+        owners: [],
+        allTags: [],
+        isAdmin: userInfo?.isAdmin,
+        error: "Transaction not found",
+      };
+    }
 
     // Get all owners using repository
     const ownersList = await ownersRepo.findMany({
@@ -82,10 +81,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     });
 
     return {
-      transaction: {
-        ...transaction,
-        tags: transactionTagsList,
-      },
+      transaction: transactionWithTags,
       owners: ownersList,
       allTags: allTagsList,
       isAdmin: userInfo?.isAdmin,

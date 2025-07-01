@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { useEffect, useState } from "react";
-import { Form, Link, useActionData, useNavigate } from "react-router";
+import { Form, Link, useActionData } from "react-router";
 import { useIsAdmin } from "~/hooks";
 import type { Route } from "./+types/owners.$id";
 
+import { TrendingDown, TrendingUp, UserPen } from "lucide-react";
 import { ownerPatterns, owners, transactions } from "../../database/schema";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
@@ -21,6 +22,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     const ownersRepo = context.dbRepository.getOwnersRepository();
     const ownerPatternsRepo = context.dbRepository.getOwnerPatternsRepository();
     const transactionsRepo = context.dbRepository.getTransactionsRepository();
+    const lpgRefillsRepo = context.dbRepository.getLpgRefillsRepository();
 
     // Find owner using repository
     const owner = await ownersRepo.findOne({
@@ -38,8 +40,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       orderBy: [{ column: ownerPatterns.created_at, direction: "desc" }],
     });
 
-    // Get recent transactions for this owner using repository
-    const recentTransactions = await transactionsRepo.findMany({
+    const recentTransactions = await transactionsRepo.findManyWithTags({
       where: and(
         eq(transactions.owner_id, ownerId),
         eq(transactions.is_duplicate, 0)
@@ -48,10 +49,14 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       pagination: { limit: 5 },
     });
 
+    // Get refill history for this owner
+    const refillHistory = await lpgRefillsRepo.findRefillsByOwnerId(ownerId);
+
     return {
       owner,
       patterns,
       recentTransactions,
+      refillHistory,
       error: null,
       isAdmin: session?.isAdmin ?? false,
     };
@@ -65,19 +70,74 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   }
 }
 
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const session = await context.getSession();
+
+  // Check if user is admin
+  if (!session?.isAdmin) {
+    return {
+      success: false,
+      error: "Admin privileges required to edit owners",
+    };
+  }
+
+  const ownerId = Number.parseInt(params.id);
+
+  // Make sure we have a valid numeric ID
+  if (isNaN(ownerId)) {
+    return { success: false, error: "Invalid owner ID" };
+  }
+
+  try {
+    const formData = await request.formData();
+    const name = formData.get("name")?.toString();
+    const apartment_id = formData.get("apartment_id")?.toString();
+    const email = formData.get("email")?.toString() || null;
+    const phone = formData.get("phone")?.toString() || null;
+    const is_active = formData.get("is_active") ? 1 : 0;
+
+    if (!name || !apartment_id) {
+      return { success: false, error: "Name and Apartment ID are required" };
+    }
+
+    const updateData = {
+      name,
+      apartment_id,
+      email,
+      phone,
+      is_active,
+      updated_at: Math.floor(Date.now() / 1000),
+    };
+
+    await context.dbRepository
+      .getOwnersRepository()
+      .update(ownerId, updateData);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating owner:", error);
+    return { success: false, error: "Failed to update owner" };
+  }
+}
+
 export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
-  const { owner, patterns, recentTransactions, error } = loaderData;
+  const { owner, patterns, recentTransactions, refillHistory, error } =
+    loaderData;
   const isAdmin = useIsAdmin();
   const actionData = useActionData<any>();
-  const navigate = useNavigate();
   const [isPatternModalOpen, setIsPatternModalOpen] = useState(false);
+  const [isEditingOwner, setIsEditingOwner] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Handle action results, including redirects
+  // Handle action results
   useEffect(() => {
-    if (actionData?.success && actionData?.redirect) {
-      navigate(actionData.redirect);
+    if (actionData?.success) {
+      setIsEditingOwner(false);
+      setActionError(null);
+    } else if (actionData?.error) {
+      setActionError(actionData.error);
     }
-  }, [actionData, navigate]);
+  }, [actionData]);
 
   // Format currency function
   const formatCurrency = (amount: number) => {
@@ -134,18 +194,6 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
           <p className="text-gray-500">Apartment: {owner.apartment_id}</p>
         </div>
         <div className="join mt-4 md:mt-0">
-          {isAdmin ? (
-            <Link to={`/owners/${owner.id}/edit`} className="btn join-item">
-              Edit Owner
-            </Link>
-          ) : (
-            <button
-              className="btn join-item btn-disabled"
-              title="Admin access required"
-            >
-              Edit Owner
-            </button>
-          )}
           <Link to="/owners" className="btn join-item">
             Back to Owners
           </Link>
@@ -172,36 +220,138 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
         </div>
       )}
 
+      {actionError && (
+        <div role="alert" className="alert alert-error mb-6">
+          <span>{actionError}</span>
+        </div>
+      )}
+
       {/* Owner Information */}
       <div className="card shadow-md mb-6">
         <div className="card-body">
-          <h2 className="card-title">Owner Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="font-semibold">Status:</p>
-              {owner.is_active ? (
-                <div className="badge badge-success">Active</div>
-              ) : (
-                <div className="badge badge-error">Inactive</div>
-              )}
-            </div>
-            {owner.email && (
-              <div>
-                <p className="font-semibold">Email:</p>
-                <p>{owner.email}</p>
-              </div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="card-title">Owner Information</h2>
+            {isAdmin && !isEditingOwner && (
+              <button
+                onClick={() => setIsEditingOwner(true)}
+                className="btn btn-sm"
+              >
+                <UserPen className="w-4 h-4" />
+              </button>
             )}
-            {owner.phone && (
-              <div>
-                <p className="font-semibold">Phone:</p>
-                <p>{owner.phone}</p>
-              </div>
-            )}
-            <div>
-              <p className="font-semibold">Created:</p>
-              <p>{formatDate(owner.created_at)}</p>
-            </div>
           </div>
+
+          {isEditingOwner && isAdmin ? (
+            <Form method="post" onSubmit={() => setActionError(null)}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Name</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={owner.name}
+                    placeholder="Full name"
+                    className="input input-bordered"
+                    required
+                  />
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Apartment ID</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="apartment_id"
+                    defaultValue={owner.apartment_id}
+                    placeholder="e.g. A-101"
+                    className="input input-bordered"
+                    required
+                  />
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Email</span>
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    defaultValue={owner.email || ""}
+                    placeholder="Email address"
+                    className="input input-bordered"
+                  />
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Phone</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    defaultValue={owner.phone || ""}
+                    placeholder="Phone number"
+                    className="input input-bordered"
+                  />
+                </div>
+
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">Active</span>
+                    <input
+                      type="checkbox"
+                      name="is_active"
+                      defaultChecked={owner.is_active === 1}
+                      className="checkbox checkbox-primary"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingOwner(false)}
+                  className="btn btn-ghost"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </Form>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="font-semibold">Status:</p>
+                {owner.is_active ? (
+                  <div className="badge badge-success">Active</div>
+                ) : (
+                  <div className="badge badge-error">Inactive</div>
+                )}
+              </div>
+              {owner.email && (
+                <div>
+                  <p className="font-semibold">Email:</p>
+                  <p>{owner.email}</p>
+                </div>
+              )}
+              {owner.phone && (
+                <div>
+                  <p className="font-semibold">Phone:</p>
+                  <p>{owner.phone}</p>
+                </div>
+              )}
+              <div>
+                <p className="font-semibold">Created:</p>
+                <p>{formatDate(owner.created_at)}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -337,11 +487,11 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {/* Recent Transactions Section */}
-      <div className="card shadow-md">
+      {/* Transactions Section */}
+      <div className="card shadow-md mb-6">
         <div className="card-body">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="card-title">Recent Transactions</h2>
+            <h2 className="card-title">Transactions</h2>
             <Link
               to={`/transactions?ownerId=${owner.id}`}
               className="btn btn-sm"
@@ -362,7 +512,7 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                     <th>Date</th>
                     <th>Description</th>
                     <th>Amount</th>
-                    <th>Type</th>
+                    <th>Tags</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -377,17 +527,121 @@ export default function OwnerDetailsPage({ loaderData }: Route.ComponentProps) {
                             : "text-error"
                         }
                       >
-                        {formatCurrency(transaction.amount)}
+                        <div className="flex items-center gap-2">
+                          {transaction.type === "credit" ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4" />
+                          )}
+                          {formatCurrency(transaction.amount)}
+                        </div>
                       </td>
                       <td>
-                        {transaction.type === "credit" ? (
-                          <div className="badge badge-success">Money In</div>
-                        ) : (
-                          <div className="badge badge-error">Money Out</div>
-                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {transaction.tags && transaction.tags.length > 0 ? (
+                            transaction.tags.map((tag) => (
+                              <div
+                                key={tag.id}
+                                className="badge badge-info badge-sm"
+                              >
+                                {tag.name}
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-base-content/50 text-sm">
+                              No tags
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Refill History Section */}
+      <div className="card shadow-md">
+        <div className="card-body">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="card-title">Refill History</h2>
+            <Link to="/lpg" className="btn btn-sm btn-outline">
+              View All Refills
+            </Link>
+          </div>
+
+          {refillHistory && refillHistory.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-base-content/70">
+                No refill history found for this owner.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Consumption</th>
+                    <th>Percentage</th>
+                    <th>Tag</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {refillHistory &&
+                    refillHistory.map((refill: any) => (
+                      <tr key={refill.id}>
+                        <td>{formatDate(refill.refill_date)}</td>
+                        <td className="font-semibold">
+                          {formatCurrency(refill.ownerEntry?.total_amount || 0)}
+                        </td>
+                        <td>
+                          <span className="text-info font-medium">
+                            {refill.ownerEntry?.consumption?.toFixed(2) ||
+                              "0.00"}{" "}
+                            gal
+                          </span>
+                        </td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">
+                              {refill.ownerEntry?.percentage?.toFixed(1) ||
+                                "0.0"}
+                              %
+                            </span>
+                            <progress
+                              className="progress progress-primary w-16"
+                              value={refill.ownerEntry?.percentage || 0}
+                              max="100"
+                            ></progress>
+                          </div>
+                        </td>
+                        <td>
+                          {refill.tag ? (
+                            <div className="badge badge-info badge-sm">
+                              {refill.tag.name}
+                            </div>
+                          ) : (
+                            <span className="text-base-content/50 text-sm">
+                              No tag
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <Link
+                            to={`/lpg/${refill.id}`}
+                            className="btn btn-sm btn-outline"
+                          >
+                            View Details
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
