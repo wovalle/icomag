@@ -1,20 +1,17 @@
-import { Link, useLoaderData } from "react-router";
+import { Link } from "react-router";
 import { useIsAdmin } from "~/hooks";
-import type { LpgRefillWithDetails } from "../types";
+import type { LpgRefillEntryWithDetails } from "../types";
+import type { Route } from "./+types/lpg.$id";
 
-interface LoaderData {
-  refill: LpgRefillWithDetails | null;
-  error: string | null;
-  isAdmin: boolean;
-}
+type PendingPayment = {
+  entry: LpgRefillEntryWithDetails;
+  amountOwed: number;
+  amountPaid: number;
+  remainingBalance: number;
+  status: "pending" | "paid" | "skipped";
+};
 
-export async function loader({
-  params,
-  context,
-}: {
-  params: { id: string };
-  context: any;
-}): Promise<LoaderData> {
+export async function loader({ params, context }: Route.LoaderArgs) {
   try {
     const session = await context.getSession();
     const refillId = parseInt(params.id);
@@ -24,6 +21,7 @@ export async function loader({
         refill: null,
         error: "Invalid refill ID",
         isAdmin: session?.isAdmin ?? false,
+        transactions: [],
       };
     }
 
@@ -38,13 +36,65 @@ export async function loader({
         refill: null,
         error: "Refill not found",
         isAdmin: session?.isAdmin ?? false,
+        transactions: [],
       };
+    }
+
+    let pendingPayments: PendingPayment[] = [];
+
+    if (refill.entries && refill.entries.length > 0 && refill.tag) {
+      const transactionRepo = context.dbRepository.getTransactionsRepository();
+
+      // Get all transactions for this tag
+      const allTransactions = await transactionRepo.findWithFilters({
+        tagId: refill.tag.id.toString(),
+        limit: 1000, // Get a large number to ensure we capture all payments
+        page: 1,
+      });
+
+      // Get apartments with positive amounts (they owe money)
+      const apartmentsWithDebt = refill.entries.filter(
+        (entry) => (entry.total_amount || 0) > 0
+      );
+
+      // Calculate payments for each apartment
+      pendingPayments = apartmentsWithDebt
+        .map((entry) => {
+          if (!entry.owner_id) return null;
+
+          // Sum up all credit transactions (payments) for this owner
+          const ownerPayments = allTransactions.transactions
+            .filter((t) => t.owner_id === entry.owner_id && t.type === "credit")
+            .reduce((sum, t) => sum + t.amount, 0);
+
+          const amountOwed = entry.total_amount || 0;
+          const amountPaid = ownerPayments;
+          const remainingBalance = amountOwed - amountPaid;
+
+          // Determine status
+          let status: PendingPayment["status"] = "pending";
+          if (remainingBalance <= 0) {
+            status = "paid";
+          } else if (remainingBalance < 20) {
+            status = "skipped";
+          }
+
+          return {
+            entry,
+            amountOwed,
+            amountPaid,
+            remainingBalance,
+            status,
+          };
+        })
+        .filter((result) => result !== null);
     }
 
     return {
       refill,
       error: null,
       isAdmin: session?.isAdmin ?? false,
+      pendingPayments,
     };
   } catch (error) {
     console.error("Error loading LPG refill details:", error);
@@ -52,12 +102,13 @@ export async function loader({
       refill: null,
       error: "Failed to load refill details",
       isAdmin: false,
+      pendingPayments: [],
     };
   }
 }
 
-export default function LpgRefillDetail() {
-  const { refill, error } = useLoaderData<LoaderData>();
+export default function LpgRefillDetail({ loaderData }: Route.ComponentProps) {
+  const { refill, error, pendingPayments } = loaderData;
   const isAdmin = useIsAdmin();
 
   // Format currency function
@@ -341,23 +392,93 @@ export default function LpgRefillDetail() {
         </div>
       </div>
 
-      {/* Transactions for this Refill */}
+      {/* Pending Payments */}
       {refill.tag && (
         <div className="card shadow-md">
           <div className="card-body">
-            <h2 className="card-title mb-4">Associated Transactions</h2>
-            <div className="text-center py-8">
-              <p className="text-base-content/70">
-                Transactions associated with tag "{refill.tag.name}" will be
-                displayed here.
-              </p>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="card-title">Pending Payments</h2>
               <Link
                 to={`/transactions?tagId=${refill.tag.id}`}
-                className="btn btn-primary mt-4"
+                className="btn btn-sm"
               >
-                View Transactions
+                View All Transactions
               </Link>
             </div>
+
+            {pendingPayments.length === 0 ? (
+              <div className="text-center py-4">
+                <p>No pending payments found.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Apartment</th>
+                      <th>Owner</th>
+                      <th>Amount Owed</th>
+                      <th>Amount Paid</th>
+                      <th>Remaining Balance</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingPayments.map((payment) => (
+                      <tr key={payment.entry.id}>
+                        <td>
+                          <div className="font-bold">
+                            {payment.entry.owner?.apartment_id}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="flex flex-col">
+                            <div className="font-medium">
+                              {payment.entry.owner?.name}
+                            </div>
+                            {payment.entry.owner?.email && (
+                              <div className="text-sm text-gray-500">
+                                {payment.entry.owner.email}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="font-bold text-error">
+                          {formatCurrency(payment.amountOwed)}
+                        </td>
+                        <td className="text-success">
+                          {formatCurrency(payment.amountPaid)}
+                        </td>
+                        <td
+                          className={
+                            payment.remainingBalance <= 0
+                              ? "text-success font-bold"
+                              : payment.remainingBalance < 20
+                              ? "text-warning font-bold"
+                              : "text-error font-bold"
+                          }
+                        >
+                          {formatCurrency(payment.remainingBalance)}
+                        </td>
+                        <td>
+                          <div
+                            className={`badge ${
+                              payment.status === "paid"
+                                ? "badge-success"
+                                : payment.status === "skipped"
+                                ? "badge-warning"
+                                : "badge-error"
+                            }`}
+                          >
+                            {payment.status}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
