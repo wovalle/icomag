@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useActionData, useFetcher, useNavigate } from "react-router";
 import {
   lpgRefills,
+  owners,
   tagPatterns,
   transactionTags,
 } from "../../database/schema";
@@ -25,6 +26,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       context.dbRepository.getTransactionTagsRepository();
     const tagPatternsRepo = context.dbRepository.getTagPatternsRepository();
     const transactionRepo = context.dbRepository.getTransactionsRepository();
+    const ownersRepo = context.dbRepository.getOwnersRepository();
 
     // Find tag using repository method with parent tag relation
     const tag = await transactionTagsRepo.getTransactionTagsWithParentTag(
@@ -48,27 +50,69 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       orderBy: [{ column: tagPatterns.created_at, direction: "desc" }],
     });
 
-    // Get recent transactions for this tag using repository method with tags
-    const recentTransactions = await transactionRepo.findWithFilters({
+    // Get all transactions for this tag using repository method with tags
+    const allTransactions = await transactionRepo.findWithFilters({
       tagId: tagId.toString(),
-      limit: 20,
+      limit: 1000, // Get all transactions for the tag
       page: 1,
     });
 
+    // Get recent transactions (first 20) for display
+    const recentTransactions = allTransactions.transactions.slice(0, 20);
+
     // Check if this tag is associated with any LPG refills
     const lpgRefillsRepo = context.dbRepository.getLpgRefillsRepository();
-    const associatedRefills = await lpgRefillsRepo.findMany({
+    const associatedRefill = await lpgRefillsRepo.findMany({
       where: eq(lpgRefills.tag_id, tagId),
       pagination: { limit: 1 }, // We only need to know if any exist
     });
+
+    // For monthly-payment tags, get all active owners and their payment data
+    let apartmentPayments: Array<{
+      owner: any;
+      amountPaid: number;
+      lastPaymentDate: number | null;
+      paymentCount: number;
+    }> = [];
+
+    if (tag.kind === "monthly-payment") {
+      // Get all active owners
+      const allActiveOwners = await ownersRepo.findMany({
+        where: eq(owners.is_active, 1),
+        orderBy: [{ column: owners.apartment_id, direction: "asc" }],
+      });
+
+      // Calculate payment data for each owner using the already fetched transactions
+      apartmentPayments = allActiveOwners.map((owner) => {
+        // Get all credit transactions (payments) for this owner and tag
+        const ownerPayments = allTransactions.transactions.filter(
+          (t) => t.owner_id === owner.id && t.type === "credit"
+        );
+
+        const amountPaid = ownerPayments.reduce((sum, t) => sum + t.amount, 0);
+        const paymentCount = ownerPayments.length;
+        const lastPaymentDate =
+          ownerPayments.length > 0
+            ? Math.max(...ownerPayments.map((t) => t.date))
+            : null;
+
+        return {
+          owner,
+          amountPaid,
+          lastPaymentDate,
+          paymentCount,
+        };
+      });
+    }
 
     return {
       tag,
       allTags,
       patterns,
-      recentTransactions: recentTransactions.transactions,
+      recentTransactions: recentTransactions,
       associatedRefill:
-        associatedRefills.length > 0 ? associatedRefills[0] : null,
+        associatedRefill.length > 0 ? associatedRefill[0] : null,
+      apartmentPayments,
       error: null,
       isAdmin: session?.isAdmin ?? false,
     };
@@ -110,6 +154,7 @@ export async function action({ params, context, request }: Route.ActionArgs) {
     const description = formData.get("description")?.toString() || null;
     const parentId = formData.get("parentId")?.toString();
     const color = formData.get("color")?.toString() || null;
+    const kind = formData.get("kind")?.toString() || null;
 
     if (!name) {
       return { success: false, error: "Name is required", action: "edit" };
@@ -122,6 +167,7 @@ export async function action({ params, context, request }: Route.ActionArgs) {
         description,
         parent_id: parentId ? parseInt(parentId) : null,
         color,
+        kind,
       });
 
       return { success: true, redirect: `/tags/${id}`, action: "edit" };
@@ -156,6 +202,7 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
     patterns,
     recentTransactions,
     associatedRefill,
+    apartmentPayments,
     error,
     isAdmin,
   } = loaderData;
@@ -321,6 +368,20 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
             <div>
+              <p className="font-semibold">Kind:</p>
+              <p>
+                {tag.kind ? (
+                  <span className="badge badge-info">
+                    {tag.kind === "monthly-payment"
+                      ? "Monthly Payment"
+                      : tag.kind}
+                  </span>
+                ) : (
+                  "No kind specified"
+                )}
+              </p>
+            </div>
+            <div>
               <p className="font-semibold">Created:</p>
               <p>{formatDate(tag.created_at)}</p>
             </div>
@@ -355,7 +416,7 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentTransactions.map((transaction) => (
+                  {recentTransactions.map((transaction: any) => (
                     <tr key={transaction.id}>
                       <td>{formatDate(transaction.date)}</td>
                       <td>{transaction.description}</td>
@@ -386,7 +447,7 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                       <td>
                         <div className="flex flex-wrap gap-1">
                           {transaction.tags && transaction.tags.length > 0 ? (
-                            transaction.tags.map((transactionTag) => (
+                            transaction.tags.map((transactionTag: any) => (
                               <div
                                 key={transactionTag.id}
                                 className="badge badge-info badge-sm"
@@ -414,6 +475,84 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
           )}
         </div>
       </div>
+
+      {/* Per Apartment Payments Section - Only for monthly-payment tags */}
+      {tag.kind === "monthly-payment" && (
+        <div className="card shadow-md mb-6">
+          <div className="card-body">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="card-title">Per Apartment Payments</h2>
+              <Link to={`/transactions?tagId=${tag.id}`} className="btn btn-sm">
+                View All Transactions
+              </Link>
+            </div>
+
+            {apartmentPayments.length === 0 ? (
+              <div className="text-center py-4">
+                <p>No active apartments found.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Apartment</th>
+                      <th>Owner</th>
+                      <th>Amount Paid</th>
+                      <th>Last Payment Date</th>
+                      <th>Payment Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apartmentPayments.map((payment) => (
+                      <tr key={payment.owner.id}>
+                        <td>
+                          <div className="font-bold">
+                            {payment.owner.apartment_id}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="flex flex-col">
+                            <Link
+                              to={`/owners/${payment.owner.id}`}
+                              className="link link-primary font-medium"
+                            >
+                              {payment.owner.name}
+                            </Link>
+                            {payment.owner.email && (
+                              <div className="text-sm text-gray-500">
+                                {payment.owner.email}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="font-bold text-success">
+                          {formatCurrency(payment.amountPaid)}
+                        </td>
+                        <td>
+                          {payment.lastPaymentDate ? (
+                            formatDate(payment.lastPaymentDate)
+                          ) : (
+                            <span className="text-base-content/50">
+                              No payments
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="badge badge-info">
+                            {payment.paymentCount} payment
+                            {payment.paymentCount !== 1 ? "s" : ""}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Recognition Patterns Section */}
       {patterns.length > 0 && (
@@ -584,6 +723,20 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                     defaultValue={tag.color || "#000000"}
                     className="input input-bordered h-12"
                   />
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Kind</span>
+                  </label>
+                  <select
+                    name="kind"
+                    className="select select-bordered"
+                    defaultValue={tag.kind || ""}
+                  >
+                    <option value="">No Kind</option>
+                    <option value="monthly-payment">Monthly Payment</option>
+                  </select>
                 </div>
 
                 <div className="modal-action">

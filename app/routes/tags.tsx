@@ -44,8 +44,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (intent === "create") {
     const name = formData.get("name") as string;
+    const kind = formData.get("kind")?.toString() || null;
     try {
-      const tag = await tagsRepository.create({ name });
+      const tag = await tagsRepository.create({ name, kind });
       return { success: true, error: null };
     } catch (error) {
       console.error("Error creating tag:", error);
@@ -119,6 +120,10 @@ export default function TagsPage() {
               className="input input-bordered"
               required
             />
+            <select name="kind" className="select select-bordered">
+              <option value="">No Kind</option>
+              <option value="monthly-payment">Monthly Payment</option>
+            </select>
             <button type="submit" className="btn btn-primary">
               Add Tag
             </button>
@@ -131,6 +136,10 @@ export default function TagsPage() {
               className="input input-bordered"
               disabled
             />
+            <select className="select select-bordered" disabled>
+              <option value="">No Kind</option>
+              <option value="monthly-payment">Monthly Payment</option>
+            </select>
             <button
               className="btn btn-primary btn-disabled"
               title="Admin access required"
@@ -182,6 +191,13 @@ export default function TagsPage() {
                   ></div>
                 )}
               </div>
+              {tag.kind && (
+                <div className="badge badge-info badge-sm">
+                  {tag.kind === "monthly-payment"
+                    ? "Monthly Payment"
+                    : tag.kind}
+                </div>
+              )}
               <div className="card-actions justify-end">
                 {isAdmin ? (
                   <button

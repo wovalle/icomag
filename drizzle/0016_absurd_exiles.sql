@@ -1,0 +1,1 @@
+ALTER TABLE `transaction_tags` ADD `kind` text;

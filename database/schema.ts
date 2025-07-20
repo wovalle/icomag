@@ -155,6 +155,7 @@ export const transactionTags = sqliteTable(
     updated_at: integer()
       .notNull()
       .$defaultFn(() => Math.floor(Date.now() / 1000)),
+    kind: text({ enum: ["monthly-payment"] }),
   },
   (table) => {
     return {
