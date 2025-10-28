@@ -132,4 +132,102 @@ export class LpgRefillRepository extends AuditableDrizzleRepository<
       ownerEntry: entry,
     }));
   }
+
+  /**
+   * Get pending payments for an LPG refill
+   */
+  async getPendingPaymentsForRefill(refillId: number, transactionRepo: any) {
+    const refill = await this.findByIdWithDetails(refillId);
+
+    if (!refill?.entries || !refill.tag) {
+      return [];
+    }
+
+    const allTransactions = await transactionRepo.findWithFilters({
+      tagId: refill.tag.id.toString(),
+      limit: 1000,
+      page: 1,
+    });
+
+    const apartmentsWithDebt = refill.entries.filter(
+      (entry) => (entry.total_amount || 0) > 0
+    );
+
+    const pendingPayments = apartmentsWithDebt
+      .map((entry) => {
+        if (!entry.owner_id) return null;
+
+        const ownerPayments = allTransactions.transactions
+          .filter((t) => t.owner_id === entry.owner_id && t.type === "credit")
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const amountOwed = entry.total_amount || 0;
+        const amountPaid = ownerPayments;
+        const remainingBalance = amountOwed - amountPaid;
+
+        let status: "paid" | "pending" = "pending";
+        if (remainingBalance <= 0) {
+          status = "paid";
+        }
+
+        return {
+          entry,
+          owner: entry.owner,
+          amountOwed,
+          amountPaid,
+          remainingBalance,
+          status,
+        };
+      })
+      .filter((result) => result !== null);
+
+    return pendingPayments;
+  }
+
+  /**
+   * Get pending payments for all LPG refills
+   */
+  async getAllPendingPayments(transactionRepo: any) {
+    const allRefills = await this.findMany({});
+
+    const allPendingPayments = await Promise.all(
+      allRefills
+        .filter((refill) => refill.tag_id)
+        .map((refill) =>
+          this.getPendingPaymentsForRefill(refill.id, transactionRepo)
+        )
+    );
+
+    // Flatten and aggregate by owner
+    const ownerPaymentsMap = new Map();
+
+    allPendingPayments.flat().forEach((payment: any) => {
+      if (!payment?.owner) return;
+
+      const ownerId = payment.owner.id;
+      if (!ownerPaymentsMap.has(ownerId)) {
+        ownerPaymentsMap.set(ownerId, {
+          owner: payment.owner,
+          totalOwed: 0,
+          totalPaid: 0,
+          remainingBalance: 0,
+          refills: [],
+        });
+      }
+
+      const ownerData = ownerPaymentsMap.get(ownerId);
+      ownerData.totalOwed += payment.amountOwed || 0;
+      ownerData.totalPaid += payment.amountPaid || 0;
+      ownerData.remainingBalance += payment.remainingBalance || 0;
+    });
+
+    return Array.from(ownerPaymentsMap.values()).map((data: any) => ({
+      owner: data.owner,
+      amountOwed: data.totalOwed,
+      amountPaid: data.totalPaid,
+      remainingBalance: data.remainingBalance,
+      status:
+        data.remainingBalance <= 0 ? ("paid" as const) : ("pending" as const),
+    }));
+  }
 }

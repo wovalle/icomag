@@ -344,4 +344,117 @@ export class TransactionRepository extends AuditableDrizzleRepository<
       owner: result.owners,
     }));
   }
+
+  /**
+   * Get apartment payment breakdown for a monthly-payment tag
+   */
+  async getMonthlyPaymentData(tagId: number, ownersRepo: any) {
+    // Get all active owners
+    const allActiveOwners = await ownersRepo.findMany({
+      where: eq(schema.owners.is_active, 1),
+      orderBy: [{ column: schema.owners.apartment_id, direction: "asc" }],
+    });
+
+    // Get all transactions for this tag
+    const allTransactions = await this.findWithFilters({
+      tagId: tagId.toString(),
+      limit: 1000,
+      page: 1,
+    });
+
+    // Calculate payment data for each owner
+    const apartmentPayments = allActiveOwners.map((owner) => {
+      // Get all credit transactions (payments) for this owner and tag
+      const ownerPayments = allTransactions.transactions.filter(
+        (t) => t.owner_id === owner.id && t.type === "credit"
+      );
+
+      const amountPaid = ownerPayments.reduce((sum, t) => sum + t.amount, 0);
+      const paymentCount = ownerPayments.length;
+      const lastPaymentDate =
+        ownerPayments.length > 0
+          ? Math.max(...ownerPayments.map((t) => t.date))
+          : null;
+
+      // Store individual payment transactions
+      const transactions = ownerPayments.map((t) => ({
+        id: t.id,
+        date: t.date,
+        amount: t.amount,
+      }));
+
+      // Determine status
+      const status: "paid" | "pending" = amountPaid > 0 ? "paid" : "pending";
+
+      return {
+        owner,
+        amountPaid,
+        lastPaymentDate,
+        paymentCount,
+        transactions,
+        status,
+      };
+    });
+
+    return apartmentPayments;
+  }
+
+  /**
+   * Get payment breakdown for multiple monthly-payment tags (for "all" view)
+   */
+  async getAllMonthlyPaymentsData(tagIds: number[], ownersRepo: any) {
+    // Get all active owners
+    const allActiveOwners = await ownersRepo.findMany({
+      where: eq(schema.owners.is_active, 1),
+      orderBy: [{ column: schema.owners.apartment_id, direction: "asc" }],
+    });
+
+    // For each tag, get transactions
+    const allTransactionsList = await Promise.all(
+      tagIds.map((tagId) =>
+        this.findWithFilters({
+          tagId: tagId.toString(),
+          limit: 1000,
+          page: 1,
+        })
+      )
+    );
+
+    // Flatten all transactions
+    const allTransactions = allTransactionsList.flatMap((r) => r.transactions);
+
+    // For each owner, calculate payments across all selected tags
+    return allActiveOwners.map((owner) => {
+      const ownerTransactions = allTransactions.filter(
+        (t) => t.owner_id === owner.id && t.type === "credit"
+      );
+
+      const amountPaid = ownerTransactions.reduce(
+        (sum, t) => sum + t.amount,
+        0
+      );
+      const paymentCount = ownerTransactions.length;
+      const lastPaymentDate =
+        ownerTransactions.length > 0
+          ? Math.max(...ownerTransactions.map((t) => t.date))
+          : null;
+
+      const transactions = ownerTransactions.map((t) => ({
+        id: t.id,
+        date: t.date,
+        amount: t.amount,
+      }));
+
+      const status: "paid" | "pending" = amountPaid > 0 ? "paid" : "pending";
+
+      return {
+        owner,
+        amountPaid,
+        lastPaymentDate,
+        paymentCount,
+        transactions,
+        status,
+      };
+    });
+  }
 }
