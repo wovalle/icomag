@@ -580,28 +580,18 @@ export const formatters = {
   },
 
   /**
-   * Formats a timestamp to a human-readable date string
+   * Formats a timestamp to a date string
    */
   formatDate: (timestamp: number): string => {
     const date = DateTime.fromSeconds(timestamp);
     const now = DateTime.now();
-    const diff = now.diff(date, "days").days;
 
-    // For very recent dates, show relative time
-    if (diff < 1) {
-      if (date.hasSame(now, "day")) {
-        return "Today";
-      }
-    } else if (diff < 2) {
-      return "Yesterday";
-    } else if (diff < 7) {
-      return `${Math.floor(diff)} days ago`;
-    } else if (diff < 30) {
-      const weeks = Math.floor(diff / 7);
-      return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+    // If same year: dd mmmm (e.g., "15 January")
+    if (date.year === now.year) {
+      return date.toFormat("dd MMMM");
     }
 
-    // For older dates, show a clear format
-    return date.toFormat("MMM dd, yyyy");
+    // If different year: dd/mm/yy (e.g., "15/01/23")
+    return date.toFormat("dd/MM/yy");
   },
 };
