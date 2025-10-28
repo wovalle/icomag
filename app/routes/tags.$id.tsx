@@ -73,6 +73,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       amountPaid: number;
       lastPaymentDate: number | null;
       paymentCount: number;
+      transactions: Array<{ id: number; date: number; amount: number }>;
+      status: "paid" | "pending";
     }> = [];
 
     if (tag.kind === "monthly-payment") {
@@ -96,11 +98,23 @@ export async function loader({ params, context }: Route.LoaderArgs) {
             ? Math.max(...ownerPayments.map((t) => t.date))
             : null;
 
+        // Store individual payment transactions
+        const transactions = ownerPayments.map((t) => ({
+          id: t.id,
+          date: t.date,
+          amount: t.amount,
+        }));
+
+        // Determine status
+        const status: "paid" | "pending" = amountPaid > 0 ? "paid" : "pending";
+
         return {
           owner,
           amountPaid,
           lastPaymentDate,
           paymentCount,
+          transactions,
+          status,
         };
       });
     }
@@ -496,12 +510,12 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {/* Per Apartment Payments Section - Only for monthly-payment tags */}
+      {/* Apartment Payment Breakdown Section - Only for monthly-payment tags */}
       {tag.kind === "monthly-payment" && (
         <div className="card shadow-md mb-6">
           <div className="card-body">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="card-title">Per Apartment Payments</h2>
+              <h2 className="card-title">Apartment Payment Breakdown</h2>
               <Link to={`/transactions?tagId=${tag.id}`} className="btn btn-sm">
                 View All Transactions
               </Link>
@@ -519,53 +533,81 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                       <th>Apartment</th>
                       <th>Owner</th>
                       <th>Amount Paid</th>
-                      <th>Last Payment Date</th>
-                      <th>Payment Count</th>
+                      <th>Status</th>
+                      <th>Payments</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {apartmentPayments.map((payment) => (
-                      <tr key={payment.owner.id}>
-                        <td>
-                          <div className="font-bold">
-                            {payment.owner.apartment_id}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="flex flex-col">
-                            <Link
-                              to={`/owners/${payment.owner.id}`}
-                              className="link link-primary font-medium"
+                    {apartmentPayments
+                      .sort((a, b) => {
+                        // Sort by status: pending first, then paid
+                        if (a.status !== b.status) {
+                          return a.status === "pending" ? -1 : 1;
+                        }
+                        // Then sort by apartment_id
+                        return (a.owner.apartment_id || "").localeCompare(
+                          b.owner.apartment_id || ""
+                        );
+                      })
+                      .map((payment) => (
+                        <tr key={payment.owner.id}>
+                          <td>
+                            <div className="font-bold">
+                              {payment.owner.apartment_id}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="flex flex-col">
+                              <Link
+                                to={`/owners/${payment.owner.id}`}
+                                className="link link-primary font-medium"
+                              >
+                                {payment.owner.name}
+                              </Link>
+                              {payment.owner.email && (
+                                <div className="text-sm text-gray-500">
+                                  {payment.owner.email}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td
+                            className={
+                              payment.amountPaid > 0
+                                ? "font-bold text-success"
+                                : "font-bold text-error"
+                            }
+                          >
+                            {formatCurrency(payment.amountPaid)}
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                payment.status === "paid"
+                                  ? "badge-success"
+                                  : "badge-error"
+                              }`}
                             >
-                              {payment.owner.name}
-                            </Link>
-                            {payment.owner.email && (
-                              <div className="text-sm text-gray-500">
-                                {payment.owner.email}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="font-bold text-success">
-                          {formatCurrency(payment.amountPaid)}
-                        </td>
-                        <td>
-                          {payment.lastPaymentDate ? (
-                            formatDate(payment.lastPaymentDate)
-                          ) : (
-                            <span className="text-base-content/50">
-                              No payments
+                              {payment.status}
                             </span>
-                          )}
-                        </td>
-                        <td>
-                          <div className="badge badge-info">
-                            {payment.paymentCount} payment
-                            {payment.paymentCount !== 1 ? "s" : ""}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            {payment.paymentCount > 0 ? (
+                              <Link
+                                to={`/transactions?tagId=${tag.id}&ownerId=${payment.owner.id}`}
+                                className="btn btn-xs btn-ghost"
+                              >
+                                View {payment.paymentCount} Payment
+                                {payment.paymentCount !== 1 ? "s" : ""}
+                              </Link>
+                            ) : (
+                              <span className="text-base-content/50 text-sm">
+                                No payments
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
