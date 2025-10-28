@@ -1,0 +1,10 @@
+- url.micondo.com (micon.do)
+- Analisis facturas (no recuerdo klk con eto)
+- Spanish translation
+- Consistent tables (all of the condominum fields should have their link and so on)
+- Whatsapp integration: Announcements, group summary per day/analysys, payment reminders (and personal too), whatsapp for auth
+- When it receives the deposit confirmation, store it somewhere and let them know when is processed
+- Split payments: if there's a transaction you might want to split it into two virtual transactions witht two tags
+- Banks automation
+- Analytics: money per timeframe, cathegorization
+- Service library: electricians, plumbers, attourneys, etc

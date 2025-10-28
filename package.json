@@ -18,7 +18,9 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "@react-router/fs-routes": "^7.6.2",
+    "@tanstack/react-table": "^8.21.3",
     "aws4fetch": "^1.0.20",
     "better-auth": "^1.2.9",
     "daisyui": "^5.0.35",

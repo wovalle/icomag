@@ -149,6 +149,7 @@ export const transactionTags = sqliteTable(
     description: text(),
     color: text(), // Optional color for UI display
     parent_id: integer(), // Parent tag reference
+    month_year: integer(), // YYYYMM format for monthly-payment tags (e.g., 202501 for January 2025)
     created_at: integer()
       .notNull()
       .$defaultFn(() => Math.floor(Date.now() / 1000)),

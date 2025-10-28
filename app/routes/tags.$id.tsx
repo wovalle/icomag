@@ -155,10 +155,14 @@ export async function action({ params, context, request }: Route.ActionArgs) {
     const parentId = formData.get("parentId")?.toString();
     const color = formData.get("color")?.toString() || null;
     const kind = formData.get("kind")?.toString() || null;
+    const month_year_raw = formData.get("month_year")?.toString() || null;
 
     if (!name) {
       return { success: false, error: "Name is required", action: "edit" };
     }
+
+    // Convert YYYYMM string to integer (format is already YYYYMM from form)
+    const month_year = month_year_raw ? parseInt(month_year_raw) : null;
 
     try {
       // Update tag using repository
@@ -168,6 +172,7 @@ export async function action({ params, context, request }: Route.ActionArgs) {
         parent_id: parentId ? parseInt(parentId) : null,
         color,
         kind,
+        month_year,
       });
 
       return { success: true, redirect: `/tags/${id}`, action: "edit" };
@@ -254,6 +259,15 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
   // Format date function
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString();
+  };
+
+  // Format month_year to readable format (YYYYMM -> Month YYYY)
+  const formatMonthYear = (monthYear: number | null | undefined): string => {
+    if (!monthYear) return "Not set";
+    const year = Math.floor(monthYear / 100);
+    const month = monthYear % 100;
+    const date = new Date(year, month - 1, 1);
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   };
 
   if (!tag && !error) {
@@ -381,6 +395,12 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                 )}
               </p>
             </div>
+            {tag.kind === "monthly-payment" && (
+              <div>
+                <p className="font-semibold">Month/Year:</p>
+                <p>{formatMonthYear(tag.month_year)}</p>
+              </div>
+            )}
             <div>
               <p className="font-semibold">Created:</p>
               <p>{formatDate(tag.created_at)}</p>
@@ -668,7 +688,20 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
           <div className="modal-box">
             <h3 className="font-bold text-lg">Edit Tag</h3>
             {isAdmin && (
-              <fetcher.Form method="post">
+              <fetcher.Form
+                method="post"
+                onSubmit={(e) => {
+                  const form = e.currentTarget;
+                  const monthInput = form.querySelector(
+                    'input[name="month_year"]'
+                  ) as HTMLInputElement;
+                  if (monthInput?.value) {
+                    // Convert YYYY-MM to YYYYMM for backend
+                    const value = monthInput.value;
+                    monthInput.value = value.replace("-", "");
+                  }
+                }}
+              >
                 <input type="hidden" name="_method" value="patch" />
                 <div className="form-control">
                   <label className="label">
@@ -738,6 +771,27 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                     <option value="monthly-payment">Monthly Payment</option>
                   </select>
                 </div>
+
+                {tag.kind === "monthly-payment" && (
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">Month/Year</span>
+                    </label>
+                    <input
+                      type="month"
+                      name="month_year"
+                      className="input input-bordered"
+                      defaultValue={
+                        tag.month_year
+                          ? `${Math.floor(tag.month_year / 100)}-${String(
+                              tag.month_year % 100
+                            ).padStart(2, "0")}`
+                          : ""
+                      }
+                      required
+                    />
+                  </div>
+                )}
 
                 <div className="modal-action">
                   <button type="submit" className="btn btn-primary">

@@ -15,7 +15,9 @@ export type Transaction = InferSelectModel<typeof transactions> & {
   tags: Tag[]; // Transactions include their related tags
   attachments?: Attachment[]; // Transactions include their related attachments
 };
-export type Tag = InferSelectModel<typeof transactionTags>;
+export type Tag = InferSelectModel<typeof transactionTags> & {
+  month_year?: number | null; // YYYYMM format for monthly-payment tags
+};
 export type TransactionToTag = InferSelectModel<typeof transactionToTags>;
 export type Attachment = InferSelectModel<typeof attachments>;
 

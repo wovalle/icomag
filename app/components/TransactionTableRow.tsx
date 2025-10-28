@@ -1,4 +1,5 @@
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { Combobox } from "@headlessui/react";
+import { Check, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import type { Owner, Tag, Transaction } from "../types";
@@ -37,6 +38,9 @@ export default function TransactionTableRow({
 }: TransactionTableRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
+  const [tagQuery, setTagQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
+  const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const descriptionInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoAssignFetcher = useFetcher();
@@ -72,14 +76,26 @@ export default function TransactionTableRow({
     setIsEditing(false);
   };
 
-  // Handle tag selection (now with auto-save)
-  const handleTagChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  // Filter tags based on search query
+  const filteredTags = tags
+    .filter((tag) => {
+      const isNotAlreadyAssigned = !transaction.tags?.some(
+        (t) => t.id === tag.id
+      );
+      const matchesQuery = tag.name
+        .toLowerCase()
+        .includes(tagQuery.toLowerCase());
+      return isNotAlreadyAssigned && matchesQuery;
+    })
+    .slice(0, 10); // Top 10 results
+
+  // Handle tag selection from combobox
+  const handleTagSelect = async (tag: Tag) => {
     if (!isAdmin) return;
-    const tagId = e.target.value;
-    if (tagId) {
-      await onAddTag(transaction.id, tagId);
-      e.target.value = ""; // Reset select after adding
-    }
+    await onAddTag(transaction.id, tag.id.toString());
+    setTagQuery("");
+    setSelectedTag(null);
+    setIsComboboxOpen(false);
   };
 
   // Handle auto-assign owner
@@ -362,53 +378,67 @@ export default function TransactionTableRow({
               </div>
             ))}
           {isAdmin && (
-            <div className="dropdown dropdown-end">
-              <div
-                tabIndex={0}
-                role="button"
-                className="btn btn-xs btn-circle btn-ghost"
-                title="Add tag"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
+            <Combobox value={selectedTag} onChange={handleTagSelect}>
+              <div className="relative">
+                <Combobox.Button className="btn btn-xs btn-circle btn-ghost">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                </Combobox.Button>
+                <Combobox.Options className="absolute right-0 mt-2 w-64 max-h-60 overflow-auto rounded-md bg-base-100 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                  <div className="p-2">
+                    <input
+                      type="text"
+                      className="input input-sm w-full mb-2"
+                      placeholder="Search tags..."
+                      value={tagQuery}
+                      onChange={(e) => setTagQuery(e.target.value)}
+                    />
+                  </div>
+                  {filteredTags.length === 0 && tagQuery !== "" ? (
+                    <div className="px-4 py-2 text-sm text-base-content/60">
+                      No tags found
+                    </div>
+                  ) : (
+                    filteredTags.map((tag) => (
+                      <Combobox.Option
+                        key={tag.id}
+                        value={tag}
+                        className={({ active }) =>
+                          `relative cursor-pointer select-none py-2 px-4 ${
+                            active
+                              ? "bg-primary text-primary-content"
+                              : "bg-base-100"
+                          }`
+                        }
+                      >
+                        {({ selected }) => (
+                          <div className="flex items-center">
+                            <span
+                              className="inline-block w-3 h-3 rounded-full mr-2"
+                              style={{ backgroundColor: tag.color || "#888" }}
+                            ></span>
+                            <span className="block truncate">{tag.name}</span>
+                            {selected && <Check className="ml-auto w-4 h-4" />}
+                          </div>
+                        )}
+                      </Combobox.Option>
+                    ))
+                  )}
+                </Combobox.Options>
               </div>
-              <ul
-                tabIndex={0}
-                className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48 z-10 max-h-60 overflow-y-auto"
-              >
-                {tags.map((tag) => (
-                  <li key={tag.id}>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        onAddTag(transaction.id, tag.id.toString());
-                        // Close dropdown by removing focus
-                        (e.target as HTMLElement).blur();
-                      }}
-                      className="text-left"
-                    >
-                      <span
-                        className="inline-block w-3 h-3 rounded-full mr-2"
-                        style={{ backgroundColor: tag.color || "#888" }}
-                      ></span>
-                      {tag.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            </Combobox>
           )}
         </div>
       </td>

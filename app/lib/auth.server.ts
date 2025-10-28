@@ -79,6 +79,12 @@ export function createBetterAuth(
         expiresIn: 60 * 60 * 24 * 30, // 30 days
         updateAge: 60 * 60 * 24, // 1 day
       },
+      trustedOrigins: [
+        "https://icomag.willy.im",
+        "https://icomag.willy.im/api/auth",
+        "http://localhost:5173",
+        "http://localhost:5173/api/auth",
+      ],
     });
   }
 

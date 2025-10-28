@@ -497,6 +497,71 @@ export class TransactionService {
       };
     }
   }
+
+  /**
+   * Get all tags ordered by last usage (most recently used first)
+   */
+  async getTagsOrderedByUsage(): Promise<{
+    tags: Tag[];
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      // Get tags via repository
+      const tagsList = await this.repositoryFactory
+        .getTransactionTagsRepository()
+        .findMany();
+
+      // For each tag, get the last usage timestamp from transaction_to_tags
+      const tagsWithUsage = await Promise.all(
+        tagsList.map(async (tag) => {
+          // Get the most recent usage of this tag
+          const lastUsage = await this.repositoryFactory
+            .getTransactionToTagsRepository()
+            .findMany({
+              where: eq(schema.transactionToTags.tag_id, tag.id),
+              orderBy: [
+                {
+                  column: schema.transactionToTags.created_at,
+                  direction: "desc",
+                },
+              ],
+              pagination: { limit: 1 },
+            });
+
+          const lastUsedAt = lastUsage.length > 0 ? lastUsage[0].created_at : 0;
+
+          return {
+            ...tag,
+            _lastUsedAt: lastUsedAt,
+          };
+        })
+      );
+
+      // Sort by last usage, then by creation date
+      const sortedTags = tagsWithUsage.sort((a, b) => {
+        if (a._lastUsedAt !== b._lastUsedAt) {
+          return b._lastUsedAt - a._lastUsedAt; // Descending order
+        }
+        return b.created_at - a.created_at; // Descending order by creation date
+      });
+
+      // Remove the temporary _lastUsedAt field
+      const cleanTags = sortedTags.map(({ _lastUsedAt, ...tag }) => tag);
+
+      return {
+        tags: cleanTags as Tag[],
+        success: true,
+      };
+    } catch (error) {
+      console.error("Error retrieving tags ordered by usage:", error);
+      return {
+        tags: [],
+        success: false,
+        error: "Failed to retrieve tags",
+      };
+    }
+  }
 }
 
 /**

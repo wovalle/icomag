@@ -44,7 +44,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         limit,
       }),
       transactionService.getOwners(),
-      transactionService.getTags(),
+      transactionService.getTagsOrderedByUsage(),
     ]);
 
     return {
