@@ -87,7 +87,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     let duplicatedTransactions = 0;
 
     for (const transaction of parsedTransactions) {
-      // Check if transaction already exists by comparing date, amount, type, and reference/serial
+      // Check if transaction already exists by comparing date, amount, type, serial, and bank description
       const existingTransaction = await transactionsRepo.findOne({
         where: and(
           eq(transactions.date, transaction.date),
@@ -95,6 +95,9 @@ export async function action({ request, context }: Route.ActionArgs) {
           eq(transactions.type, transaction.type),
           transaction.serial
             ? eq(transactions.serial, transaction.serial)
+            : undefined,
+          transaction.bank_description
+            ? eq(transactions.bank_description, transaction.bank_description)
             : undefined
         ),
       });
