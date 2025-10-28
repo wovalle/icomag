@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { AlertCircle, Calendar, Flame, Wallet } from "lucide-react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useIsAdmin } from "~/hooks";
 import { BalanceService } from "~/services/balanceService";
@@ -328,6 +329,7 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
 
   const isAdmin = useIsAdmin();
+  const [activeTab, setActiveTab] = useState<"monthly" | "lpg">("monthly");
 
   return (
     <div className="p-6 space-y-8">
@@ -470,18 +472,46 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {/* Monthly Payments Table */}
-      <MonthlyPaymentsTable
-        monthlyTags={allMonthlyTags}
-        allPaymentData={allMonthlyPaymentData}
-        pendingPayments={pendingMonthlyPayments}
-      />
+      {/* Tabbed Payments Section */}
+      <div className="card bg-base-100">
+        <div className="card-body">
+          {/* Tab Navigation */}
+          <div className="tabs tabs-bordered mb-6">
+            <button
+              className={`tab tab-lg ${
+                activeTab === "monthly" ? "tab-active" : ""
+              }`}
+              onClick={() => setActiveTab("monthly")}
+            >
+              <Calendar className="w-5 h-5 mr-2" />
+              Monthly Payments
+            </button>
+            <button
+              className={`tab tab-lg ${
+                activeTab === "lpg" ? "tab-active" : ""
+              }`}
+              onClick={() => setActiveTab("lpg")}
+            >
+              <Flame className="w-5 h-5 mr-2" />
+              LPG Refills
+            </button>
+          </div>
 
-      {/* LPG Payments Table */}
-      <LpgPaymentsTable
-        lpgRefills={allLpgRefills}
-        allPendingData={allLpgPendingData}
-      />
+          {/* Tab Content */}
+          {activeTab === "monthly" ? (
+            <MonthlyPaymentsTable
+              monthlyTags={allMonthlyTags}
+              allPaymentData={allMonthlyPaymentData}
+              pendingPayments={pendingMonthlyPayments}
+            />
+          ) : (
+            <LpgPaymentsTable
+              lpgRefills={allLpgRefills}
+              allPendingData={allLpgPendingData}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -499,87 +529,174 @@ function MonthlyPaymentsTable({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTagId = searchParams.get("month") || "all";
 
+  // Group payments by month when "all" is selected
+  const groupedPayments =
+    selectedTagId === "all"
+      ? pendingPayments.reduce((groups, payment) => {
+          const tagId = payment.tagId;
+          if (!groups[tagId]) {
+            groups[tagId] = [];
+          }
+          groups[tagId].push(payment);
+          return groups;
+        }, {} as Record<number, MonthlyPayment[]>)
+      : {};
+
   // Filter data based on selected tag
   const displayData =
     selectedTagId === "all"
       ? pendingPayments
       : pendingPayments.filter((p) => p.tagId === parseInt(selectedTagId));
 
-  return (
-    <div className="card bg-base-100 shadow-lg">
-      <div className="card-body">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="card-title">Monthly Payments Tracking</h2>
-          <select
-            className="select select-bordered select-sm"
-            value={selectedTagId}
-            onChange={(e) => {
-              if (e.target.value === "all") {
-                searchParams.delete("month");
-              } else {
-                searchParams.set("month", e.target.value);
-              }
-              setSearchParams(searchParams);
-            }}
-          >
-            <option value="all">All Months</option>
-            {monthlyTags.map((tag) => (
-              <option key={tag.id} value={tag.id}>
-                {formatMonthYear(tag.month_year || 0)}
-              </option>
-            ))}
-          </select>
-        </div>
+  const getTagForId = (tagId: number) =>
+    monthlyTags.find((tag) => tag.id === tagId);
 
-        {displayData.length === 0 ? (
-          <div className="alert alert-success">
-            <span className="text-success">✓</span>
-            <span>No pending payments found.</span>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table table-zebra">
-              <thead>
-                <tr>
-                  <th>Apartment</th>
-                  <th>Owner</th>
-                  <th>Amount Paid</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayData.map((payment, index) => (
-                  <tr key={`${payment.owner.id}-${index}`}>
-                    <td className="font-bold">{payment.owner.apartment_id}</td>
-                    <td>
-                      <Link
-                        to={`/owners/${payment.owner.id}`}
-                        className="link link-primary font-medium"
-                      >
-                        {payment.owner.name}
-                      </Link>
-                      {payment.owner.email && (
-                        <div className="text-sm text-gray-500">
-                          {payment.owner.email}
-                        </div>
-                      )}
-                    </td>
-                    <td className="font-bold text-error">
-                      {formatCurrency(payment.amountPaid)}
-                    </td>
-                    <td>
-                      <span className="badge badge-error">
-                        {payment.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+  return (
+    <>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">Monthly Payments Tracking</h2>
+        <select
+          className="select select-bordered select-sm"
+          value={selectedTagId}
+          onChange={(e) => {
+            if (e.target.value === "all") {
+              searchParams.delete("month");
+            } else {
+              searchParams.set("month", e.target.value);
+            }
+            setSearchParams(searchParams);
+          }}
+        >
+          <option value="all">All Months</option>
+          {monthlyTags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {formatMonthYear(tag.month_year || 0)}
+            </option>
+          ))}
+        </select>
       </div>
-    </div>
+
+      {displayData.length === 0 ? (
+        <div className="alert alert-success">
+          <span className="text-success">✓</span>
+          <span>No pending payments found.</span>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Apartment</th>
+                <th>Owner</th>
+                <th>Amount Paid</th>
+                <th>Status</th>
+                {selectedTagId === "all" && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {selectedTagId === "all"
+                ? // Grouped rows for "All Months"
+                  Object.entries(groupedPayments)
+                    .map(([tagId, payments]) => {
+                      const tag = getTagForId(Number(tagId));
+                      return [
+                        // Group header row
+                        <tr key={`header-${tagId}`} className="bg-base-200">
+                          <td colSpan={5} className="font-bold text-lg py-4">
+                            <div className="flex items-center justify-between">
+                              <span>
+                                {tag
+                                  ? formatMonthYear(tag.month_year || 0)
+                                  : "Unknown Month"}
+                                <span className="ml-2 badge badge-error badge-sm text-white">
+                                  {payments.length} pending
+                                </span>
+                              </span>
+                              {tag && (
+                                <Link
+                                  to={`/tags/${tag.id}`}
+                                  className="btn btn-sm btn-ghost"
+                                >
+                                  View Tag
+                                </Link>
+                              )}
+                            </div>
+                          </td>
+                        </tr>,
+                        // Payment rows for this group
+                        ...payments.map((payment, index) => (
+                          <tr key={`${payment.owner.id}-${index}`}>
+                            <td className="font-bold">
+                              {payment.owner.apartment_id}
+                            </td>
+                            <td>
+                              <Link
+                                to={`/owners/${payment.owner.id}`}
+                                className="link link-primary font-medium"
+                              >
+                                {payment.owner.name}
+                              </Link>
+                              {payment.owner.email && (
+                                <div className="text-sm text-gray-500">
+                                  {payment.owner.email}
+                                </div>
+                              )}
+                            </td>
+                            <td className="font-bold text-error">
+                              {formatCurrency(payment.amountPaid)}
+                            </td>
+                            <td>
+                              <span className="badge badge-error text-white">
+                                {payment.status}
+                              </span>
+                            </td>
+                            <td>
+                              <Link
+                                to={`/transactions?tagId=${payment.tagId}&ownerId=${payment.owner.id}`}
+                                className="btn btn-xs btn-ghost"
+                              >
+                                View Transactions
+                              </Link>
+                            </td>
+                          </tr>
+                        )),
+                      ];
+                    })
+                    .flat()
+                : // Single month view
+                  displayData.map((payment, index) => (
+                    <tr key={`${payment.owner.id}-${index}`}>
+                      <td className="font-bold">
+                        {payment.owner.apartment_id}
+                      </td>
+                      <td>
+                        <Link
+                          to={`/owners/${payment.owner.id}`}
+                          className="link link-primary font-medium"
+                        >
+                          {payment.owner.name}
+                        </Link>
+                        {payment.owner.email && (
+                          <div className="text-sm text-gray-500">
+                            {payment.owner.email}
+                          </div>
+                        )}
+                      </td>
+                      <td className="font-bold text-error">
+                        {formatCurrency(payment.amountPaid)}
+                      </td>
+                      <td>
+                        <span className="badge badge-error text-white">
+                          {payment.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -594,6 +711,19 @@ function LpgPaymentsTable({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedRefillId = searchParams.get("refill") || "all";
 
+  // Group payments by refill when "all" is selected
+  const groupedRefillPayments =
+    selectedRefillId === "all"
+      ? allPendingData.reduce((groups, payment) => {
+          const refillId = payment.refillId;
+          if (!groups[refillId]) {
+            groups[refillId] = [];
+          }
+          groups[refillId].push(payment);
+          return groups;
+        }, {} as Record<number, LpgPayment[]>)
+      : {};
+
   // Filter data based on selected refill
   const paymentData =
     selectedRefillId === "all"
@@ -602,107 +732,217 @@ function LpgPaymentsTable({
           (payment) => payment.refillId === parseInt(selectedRefillId)
         );
 
-  return (
-    <div className="card bg-base-100 shadow-lg">
-      <div className="card-body">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="card-title">LPG Refill Payments Tracking</h2>
-          <select
-            className="select select-bordered select-sm"
-            value={selectedRefillId}
-            onChange={(e) => {
-              if (e.target.value === "all") {
-                searchParams.delete("refill");
-              } else {
-                searchParams.set("refill", e.target.value);
-              }
-              setSearchParams(searchParams);
-            }}
-          >
-            <option value="all">All Refills</option>
-            {lpgRefills.slice(0, 3).map((refill) => (
-              <option key={refill.id} value={refill.id}>
-                {formatRefillDate(refill.refill_date)}
-              </option>
-            ))}
-          </select>
-        </div>
+  const getRefillForId = (refillId: number) =>
+    lpgRefills.find((refill) => refill.id === refillId);
 
-        {paymentData.length === 0 ? (
-          <div className="alert alert-success">
-            <span className="text-success">✓</span>
-            <span>No pending payments found.</span>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table table-zebra">
-              <thead>
-                <tr>
-                  <th>Apartment</th>
-                  <th>Owner</th>
-                  <th>Amount Owed</th>
-                  <th>Amount Paid</th>
-                  <th>Remaining</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentData.map((payment, idx) => (
-                  <tr key={`lpg-${payment.owner?.id || idx}-${idx}`}>
-                    <td className="font-bold">
-                      {payment.owner?.apartment_id ||
-                        payment.entry?.owner?.apartment_id}
-                    </td>
-                    <td>
-                      {payment.owner && (
-                        <>
-                          <Link
-                            to={`/owners/${payment.owner.id}`}
-                            className="link link-primary font-medium"
-                          >
-                            {payment.owner.name}
-                          </Link>
-                          {payment.owner.email && (
-                            <div className="text-sm text-gray-500">
-                              {payment.owner.email}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td className="font-bold text-error">
-                      {formatCurrency(payment.amountOwed || 0)}
-                    </td>
-                    <td className="text-success">
-                      {formatCurrency(payment.amountPaid || 0)}
-                    </td>
-                    <td
-                      className={
-                        (payment.remainingBalance || 0) <= 0
-                          ? "text-success font-bold"
-                          : "text-error font-bold"
-                      }
-                    >
-                      {formatCurrency(payment.remainingBalance || 0)}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          payment.status === "paid"
-                            ? "badge-success"
-                            : "badge-error"
-                        }`}
-                      >
-                        {payment.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+  return (
+    <>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">LPG Refill Payments Tracking</h2>
+        <select
+          className="select select-bordered select-sm"
+          value={selectedRefillId}
+          onChange={(e) => {
+            if (e.target.value === "all") {
+              searchParams.delete("refill");
+            } else {
+              searchParams.set("refill", e.target.value);
+            }
+            setSearchParams(searchParams);
+          }}
+        >
+          <option value="all">All Refills</option>
+          {lpgRefills.slice(0, 3).map((refill) => (
+            <option key={refill.id} value={refill.id}>
+              {formatRefillDate(refill.refill_date)}
+            </option>
+          ))}
+        </select>
       </div>
-    </div>
+
+      {paymentData.length === 0 ? (
+        <div className="alert alert-success">
+          <span className="text-success">✓</span>
+          <span>No pending payments found.</span>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Apartment</th>
+                <th>Owner</th>
+                <th>Amount Owed</th>
+                <th>Amount Paid</th>
+                <th>Remaining</th>
+                <th>Status</th>
+                {selectedRefillId === "all" && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {selectedRefillId === "all"
+                ? // Grouped rows for "All Refills"
+                  Object.entries(groupedRefillPayments)
+                    .map(([refillId, payments]) => {
+                      const refill = getRefillForId(Number(refillId));
+                      const totalPending = payments.filter(
+                        (p) => p.status === "pending"
+                      ).length;
+
+                      return [
+                        // Group header row
+                        <tr key={`header-${refillId}`} className="bg-base-200">
+                          <td colSpan={7} className="font-bold text-lg py-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  {refill ? (
+                                    <Link
+                                      to={`/lpg/${refill.id}`}
+                                      className="link link-primary font-semibold"
+                                    >
+                                      {formatRefillDate(refill.refill_date)}
+                                    </Link>
+                                  ) : (
+                                    <span>Unknown Refill</span>
+                                  )}
+                                  {totalPending > 0 && (
+                                    <span className="badge badge-error badge-sm text-white">
+                                      {totalPending} pending
+                                    </span>
+                                  )}
+                                </div>
+                                {refill && (
+                                  <div className="text-sm font-normal text-base-content/60 mt-1">
+                                    {formatCurrency(refill.bill_amount)} •{" "}
+                                    {refill.gallons_refilled} gallons
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>,
+                        // Payment rows for this group
+                        ...payments.map((payment, idx) => (
+                          <tr key={`lpg-${payment.owner?.id || idx}-${idx}`}>
+                            <td className="font-bold">
+                              {payment.owner?.apartment_id ||
+                                payment.entry?.owner?.apartment_id}
+                            </td>
+                            <td>
+                              {payment.owner && (
+                                <>
+                                  <Link
+                                    to={`/owners/${payment.owner.id}`}
+                                    className="link link-primary font-medium"
+                                  >
+                                    {payment.owner.name}
+                                  </Link>
+                                  {payment.owner.email && (
+                                    <div className="text-sm text-gray-500">
+                                      {payment.owner.email}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                            <td className="font-bold text-error">
+                              {formatCurrency(payment.amountOwed || 0)}
+                            </td>
+                            <td className="text-success">
+                              {formatCurrency(payment.amountPaid || 0)}
+                            </td>
+                            <td
+                              className={
+                                (payment.remainingBalance || 0) <= 0
+                                  ? "text-success font-bold"
+                                  : "text-error font-bold"
+                              }
+                            >
+                              {formatCurrency(payment.remainingBalance || 0)}
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  payment.status === "paid"
+                                    ? "badge-success"
+                                    : "badge-error"
+                                }`}
+                              >
+                                {payment.status}
+                              </span>
+                            </td>
+                            <td>
+                              {payment.owner && (
+                                <Link
+                                  to={`/transactions?tagId=${refill?.tag_id}&ownerId=${payment.owner.id}`}
+                                  className="btn btn-xs btn-ghost"
+                                >
+                                  View Transactions
+                                </Link>
+                              )}
+                            </td>
+                          </tr>
+                        )),
+                      ];
+                    })
+                    .flat()
+                : // Single refill view
+                  paymentData.map((payment, idx) => (
+                    <tr key={`lpg-${payment.owner?.id || idx}-${idx}`}>
+                      <td className="font-bold">
+                        {payment.owner?.apartment_id ||
+                          payment.entry?.owner?.apartment_id}
+                      </td>
+                      <td>
+                        {payment.owner && (
+                          <>
+                            <Link
+                              to={`/owners/${payment.owner.id}`}
+                              className="link link-primary font-medium"
+                            >
+                              {payment.owner.name}
+                            </Link>
+                            {payment.owner.email && (
+                              <div className="text-sm text-gray-500">
+                                {payment.owner.email}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td className="font-bold text-error">
+                        {formatCurrency(payment.amountOwed || 0)}
+                      </td>
+                      <td className="text-success">
+                        {formatCurrency(payment.amountPaid || 0)}
+                      </td>
+                      <td
+                        className={
+                          (payment.remainingBalance || 0) <= 0
+                            ? "text-success font-bold"
+                            : "text-error font-bold"
+                        }
+                      >
+                        {formatCurrency(payment.remainingBalance || 0)}
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            payment.status === "paid"
+                              ? "badge-success"
+                              : "badge-error"
+                          }`}
+                        >
+                          {payment.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   );
 }
