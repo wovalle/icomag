@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronsUpDown, ChevronUp, Filter } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Form, Link, useFetcher } from "react-router";
+import { Form, Link, useFetcher, useSearchParams } from "react-router";
 import { useIsAdmin } from "~/hooks";
 import * as schema from "../../database/schema";
 import type { Tag } from "../types";
@@ -108,8 +108,59 @@ export default function TagsPage({ loaderData }: Route.ComponentProps) {
   const isAdmin = useIsAdmin();
   const [actionError, setActionError] = useState<string | null>(null);
   const fetcher = useFetcher<typeof action>();
-  const [kindFilter, setKindFilter] = useState<string>("all");
   const [selectedKind, setSelectedKind] = useState<string>("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Parse kind filter from URL params
+  const getKindFilterFromUrl = () => {
+    return searchParams.get("kindFilter") || "all";
+  };
+
+  const [kindFilter, setKindFilter] = useState<string>(getKindFilterFromUrl);
+
+  // Parse sorting from URL params
+  const getSortingFromUrl = () => {
+    const sortBy = searchParams.get("sortBy");
+    const sortDesc = searchParams.get("sortDesc") === "true";
+
+    if (sortBy) {
+      return [{ id: sortBy, desc: sortDesc }];
+    }
+
+    // Default sorting
+    return [{ id: "created_at", desc: true }];
+  };
+
+  const [sorting, setSorting] = useState(getSortingFromUrl);
+
+  // Update URL when sorting changes
+  const updateSortingInUrl = (newSorting: any[]) => {
+    const newParams = new URLSearchParams(searchParams);
+
+    if (newSorting.length > 0) {
+      const sort = newSorting[0];
+      newParams.set("sortBy", sort.id);
+      newParams.set("sortDesc", sort.desc.toString());
+    } else {
+      newParams.delete("sortBy");
+      newParams.delete("sortDesc");
+    }
+
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Update URL when kind filter changes
+  const updateKindFilterInUrl = (newKindFilter: string) => {
+    const newParams = new URLSearchParams(searchParams);
+
+    if (newKindFilter !== "all") {
+      newParams.set("kindFilter", newKindFilter);
+    } else {
+      newParams.delete("kindFilter");
+    }
+
+    setSearchParams(newParams, { replace: true });
+  };
 
   useEffect(() => {
     if (fetcher.data?.error) {
@@ -119,6 +170,15 @@ export default function TagsPage({ loaderData }: Route.ComponentProps) {
       setSelectedKind("");
     }
   }, [fetcher.data]);
+
+  // Sync state when URL params change
+  useEffect(() => {
+    const newSorting = getSortingFromUrl();
+    setSorting(newSorting);
+
+    const newKindFilter = getKindFilterFromUrl();
+    setKindFilter(newKindFilter);
+  }, [searchParams]);
 
   // Format month_year to readable format (YYYYMM -> Month YYYY)
   const formatMonthYear = (monthYear: number | null | undefined): string => {
@@ -285,9 +345,16 @@ export default function TagsPage({ loaderData }: Route.ComponentProps) {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    initialState: {
-      sorting: [{ id: "created_at", desc: true }],
+    state: {
+      sorting,
     },
+    onSortingChange: (updater) => {
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+      setSorting(newSorting);
+      updateSortingInUrl(newSorting);
+    },
+    manualSorting: false,
   });
 
   const handleCreateSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -379,7 +446,11 @@ export default function TagsPage({ loaderData }: Route.ComponentProps) {
           <select
             className="select select-bordered select-sm"
             value={kindFilter}
-            onChange={(e) => setKindFilter(e.target.value)}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              setKindFilter(newValue);
+              updateKindFilterInUrl(newValue);
+            }}
           >
             <option value="all">All Kinds</option>
             <option value="monthly-payment">Monthly Payment</option>

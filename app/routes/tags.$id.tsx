@@ -175,8 +175,20 @@ export async function action({ params, context, request }: Route.ActionArgs) {
       return { success: false, error: "Name is required", action: "edit" };
     }
 
-    // Convert YYYYMM string to integer (format is already YYYYMM from form)
-    const month_year = month_year_raw ? parseInt(month_year_raw) : null;
+    // Convert YYYY-MM or YYYYMM string to integer
+    let month_year = null;
+    if (month_year_raw) {
+      // Handle both YYYY-MM and YYYYMM formats
+      const cleanedValue = month_year_raw.replace("-", "");
+      const parsed = parseInt(cleanedValue);
+      month_year = isNaN(parsed) ? null : parsed;
+
+      // Debug logging
+      console.log("month_year_raw:", month_year_raw);
+      console.log("cleanedValue:", cleanedValue);
+      console.log("parsed:", parsed);
+      console.log("final month_year:", month_year);
+    }
 
     try {
       // Update tag using repository
@@ -730,20 +742,7 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
           <div className="modal-box">
             <h3 className="font-bold text-lg">Edit Tag</h3>
             {isAdmin && (
-              <fetcher.Form
-                method="post"
-                onSubmit={(e) => {
-                  const form = e.currentTarget;
-                  const monthInput = form.querySelector(
-                    'input[name="month_year"]'
-                  ) as HTMLInputElement;
-                  if (monthInput?.value) {
-                    // Convert YYYY-MM to YYYYMM for backend
-                    const value = monthInput.value;
-                    monthInput.value = value.replace("-", "");
-                  }
-                }}
-              >
+              <fetcher.Form method="post">
                 <input type="hidden" name="_method" value="patch" />
                 <div className="form-control">
                   <label className="label">
@@ -808,32 +807,45 @@ export default function TagDetailsPage({ loaderData }: Route.ComponentProps) {
                     name="kind"
                     className="select select-bordered"
                     defaultValue={tag.kind || ""}
+                    onChange={(e) => {
+                      const monthYearField = e.target.form?.querySelector(
+                        '[name="month_year"]'
+                      )?.parentElement;
+                      if (monthYearField) {
+                        monthYearField.style.display =
+                          e.target.value === "monthly-payment"
+                            ? "block"
+                            : "none";
+                      }
+                    }}
                   >
                     <option value="">No Kind</option>
                     <option value="monthly-payment">Monthly Payment</option>
                   </select>
                 </div>
 
-                {tag.kind === "monthly-payment" && (
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Month/Year</span>
-                    </label>
-                    <input
-                      type="month"
-                      name="month_year"
-                      className="input input-bordered"
-                      defaultValue={
-                        tag.month_year
-                          ? `${Math.floor(tag.month_year / 100)}-${String(
-                              tag.month_year % 100
-                            ).padStart(2, "0")}`
-                          : ""
-                      }
-                      required
-                    />
-                  </div>
-                )}
+                <div
+                  className="form-control"
+                  style={{
+                    display: tag.kind === "monthly-payment" ? "block" : "none",
+                  }}
+                >
+                  <label className="label">
+                    <span className="label-text">Month/Year</span>
+                  </label>
+                  <input
+                    type="month"
+                    name="month_year"
+                    className="input input-bordered"
+                    defaultValue={
+                      tag.month_year
+                        ? `${Math.floor(tag.month_year / 100)}-${String(
+                            tag.month_year % 100
+                          ).padStart(2, "0")}`
+                        : ""
+                    }
+                  />
+                </div>
 
                 <div className="modal-action">
                   <button type="submit" className="btn btn-primary">

@@ -1,5 +1,6 @@
 import { and, eq, type SQL } from "drizzle-orm";
 import { DrizzleD1Database } from "drizzle-orm/d1";
+import { DateTime } from "luxon";
 import * as schema from "../../database/schema";
 import { RepositoryFactory } from "../repositories/RepositoryFactory";
 import type { Owner, Tag, Transaction, TransactionWithDetails } from "../types";
@@ -579,11 +580,28 @@ export const formatters = {
   },
 
   /**
-   * Formats a timestamp to a date string
+   * Formats a timestamp to a human-readable date string
    */
   formatDate: (timestamp: number): string => {
-    return new Date(timestamp * 1000).toLocaleDateString(undefined, {
-      dateStyle: "medium",
-    });
+    const date = DateTime.fromSeconds(timestamp);
+    const now = DateTime.now();
+    const diff = now.diff(date, "days").days;
+
+    // For very recent dates, show relative time
+    if (diff < 1) {
+      if (date.hasSame(now, "day")) {
+        return "Today";
+      }
+    } else if (diff < 2) {
+      return "Yesterday";
+    } else if (diff < 7) {
+      return `${Math.floor(diff)} days ago`;
+    } else if (diff < 30) {
+      const weeks = Math.floor(diff / 7);
+      return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+    }
+
+    // For older dates, show a clear format
+    return date.toFormat("MMM dd, yyyy");
   },
 };
